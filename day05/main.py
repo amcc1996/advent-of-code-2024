@@ -1,4 +1,8 @@
+import os
 import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
+
+from utils import get_input_filename, read_input_file
 
 def check_order(line, map_after_before, output_wrong_pair=False):
     entries = [int(x) for x in line.split(',')]
@@ -29,85 +33,42 @@ def fix_order(line, map_after_before):
 
     return line
 
-DATAFILE = 'data.txt'
-VALIDATION_PT1 = 'validation-part1.txt'
-VALIDATION_PT2 = 'validation-part2.txt'
+if __name__ == '__main__':
+    filename, part = get_input_filename(os.path.dirname(__file__))
+    data = read_input_file(filename)
 
-if len(sys.argv) < 2:
-    print('Usage: python main.py <part> [v]')
-    sys.exit(1)
+    map_before_after = {}
+    map_after_before = {}
+    ibreak = None
+    for i, line in enumerate(data[0]):
+        line_split = [int(x) for x in line.split('|')]
+        if line_split[0] in map_before_after:
+            map_before_after[line_split[0]].append(line_split[1])
+        else:
+            map_before_after[line_split[0]] =[line_split[1]]
 
-part = sys.argv[1]
-validation = False
-if len(sys.argv) > 2:
-    validation = (sys.argv[2] == 'v')
+        if line_split[1] in map_after_before:
+            map_after_before[line_split[1]].append(line_split[0])
+        else:
+            map_after_before[line_split[1]] =[line_split[0]]
 
-datafile = DATAFILE
-if validation:
+    data = data[1]
+
     if part == '1':
-        datafile = VALIDATION_PT1
-    else:
-        datafile = VALIDATION_PT2
+        result1 = 0
+        for line in data:
+            if check_order(line, map_after_before):
+                result1 += int(line.split(',')[int(len(line.split(',')) / 2)])
 
-with open(datafile) as f:
-    lines = f.read().splitlines()
+        print("Result of part 1: ", result1)
 
-map_before_after = {}
-map_after_before = {}
-ibreak = None
-for i, line in enumerate(lines):
-    if len(line) == 0:
-        ibreak = i
-        break
+    elif part == '2':
+        result2 = 0
+        for line in data:
+            if check_order(line, map_after_before):
+                continue
 
-    line_split = [int(x) for x in line.split('|')]
-    if line_split[0] in map_before_after:
-        map_before_after[line_split[0]].append(line_split[1])
-    else:
-        map_before_after[line_split[0]] =[line_split[1]]
+            new_line = fix_order(line, map_after_before)
+            result2 += int(new_line.split(',')[int(len(new_line.split(',')) / 2)])
 
-    if line_split[1] in map_after_before:
-        map_after_before[line_split[1]].append(line_split[0])
-    else:
-        map_after_before[line_split[1]] =[line_split[0]]
-
-data = lines[ibreak+1:]
-
-if part == '1':
-    result1 = 0
-    for line in data:
-        if check_order(line, map_after_before):
-            result1 += int(line.split(',')[int(len(line.split(',')) / 2)])
-
-    print("Result of part 1: ", result1)
-
-elif part == '2':
-    result2 = 0
-    for line in data:
-        if check_order(line, map_after_before):
-            continue
-
-        new_line = fix_order(line, map_after_before)
-        result2 += int(new_line.split(',')[int(len(new_line.split(',')) / 2)])
-
-    print("Result of part 2: ", result2)
-
-# elif part == '2':
-#     result2 = 0
-#     data =''.join(data)
-#     for line in [data]:
-#         mul_pos   = find_substring_pos(line, "mul(")
-#         do_pos    = [-1] + find_substring_pos(line, "do()") + [len(line) + 2]
-#         dont_pos  = [-2] + find_substring_pos(line, "don't()") + [len(line) + 1]
-#         print(len(do_pos), len(dont_pos))
-#         for pos in mul_pos:
-#             aux_do = [pos - x for x in do_pos if x < pos]
-#             last_do   = do_pos[aux_do.index(min(aux_do))]
-#             aux_dont = [pos - x for x in dont_pos if x < pos]
-#             last_dont = dont_pos[aux_dont.index(min(aux_dont))]
-#             word_split = line[pos+len('mul('):].split(')')[0].split(',')
-#             if word_split[0].isnumeric() and word_split[1].isnumeric() and len(word_split) == 2:
-#                 if last_do > last_dont:
-#                     result2 += int(word_split[0]) * int(word_split[1])
-
-#     print("Result of part 2: ", result2)
+        print("Result of part 2: ", result2)

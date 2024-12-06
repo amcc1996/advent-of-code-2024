@@ -1,4 +1,8 @@
+import os
 import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
+
+from utils import get_input_filename, read_input_file
 
 def move(i, j, dir):
     if dir == 'l':
@@ -86,54 +90,35 @@ def find_guard_path(i_start, j_start, dir_start, data, n_rows, n_cols):
 
     return count, visited_pos, False
 
-DATAFILE = 'data.txt'
-VALIDATION_PT1 = 'validation-part1.txt'
-VALIDATION_PT2 = 'validation-part2.txt'
+if __name__ == '__main__':
+    filename, part = get_input_filename(os.path.dirname(__file__))
+    data = read_input_file(filename)[0]
 
-if len(sys.argv) < 2:
-    print('Usage: python main.py <part> [v]')
-    sys.exit(1)
+    for line in data:
+        if '^' in line:
+            i_start, j_start = (data.index(line), line.index('^'))
+            break
 
-part = sys.argv[1]
-validation = False
-if len(sys.argv) > 2:
-    validation = (sys.argv[2] == 'v')
+    n_rows = len(data)
+    n_cols = len(data[0])
+    visited = [[x for x in line] for line in data]
 
-datafile = DATAFILE
-if validation:
     if part == '1':
-        datafile = VALIDATION_PT1
-    else:
-        datafile = VALIDATION_PT2
+        result1, visited_pos, is_loop = find_guard_path(i_start, j_start, 'u', data, n_rows, n_cols)
 
-with open(datafile) as f:
-    data = f.read().splitlines()
+        print("Result of part 1: ", result1)
 
-for line in data:
-    if '^' in line:
-        i_start, j_start = (data.index(line), line.index('^'))
-        break
+    elif part == '2':
+        result2 = 0
+        _, visited_pos, _ = find_guard_path(i_start, j_start, 'u', data, n_rows, n_cols)
+        for i, j in visited_pos:
+            if data[i][j] != '^' and data[i][j] != '#' and data[i][j]:
+                tmp = data[i][j]
+                data[i] =  data[i][0:j] + "#" + data[i][j+1:]
+                _, _, is_loop = find_guard_path(i_start, j_start, 'u', data, n_rows, n_cols)
+                if is_loop:
+                    result2 += 1
 
-n_rows = len(data)
-n_cols = len(data[0])
-visited = [[x for x in line] for line in data]
+                data[i] = data[i][0:j] + tmp + data[i][j+1:]
 
-if part == '1':
-    result1, visited_pos, is_loop = find_guard_path(i_start, j_start, 'u', data, n_rows, n_cols)
-
-    print("Result of part 1: ", result1)
-
-elif part == '2':
-    result2 = 0
-    _, visited_pos, _ = find_guard_path(i_start, j_start, 'u', data, n_rows, n_cols)
-    for i, j in visited_pos:
-        if data[i][j] != '^' and data[i][j] != '#' and data[i][j]:
-            tmp = data[i][j]
-            data[i] =  data[i][0:j] + "#" + data[i][j+1:]
-            _, _, is_loop = find_guard_path(i_start, j_start, 'u', data, n_rows, n_cols)
-            if is_loop:
-                result2 += 1
-
-            data[i] = data[i][0:j] + tmp + data[i][j+1:]
-
-    print("Result of part 2: ", result2)
+        print("Result of part 2: ", result2)
