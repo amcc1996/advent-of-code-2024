@@ -16,42 +16,26 @@ def defragment_block(id_defrag, pos_block, pos_start, files, empty):
 
     return pos_block, pos_start
 
-def fill_empty_space(id_defrag, pos_block, pos_start, files, empty):
-    print("fillin position : ", pos_start, " with space : ", empty[pos_start])
+def move_file(pos_block, files, empty, files_id, empty_id):
+    if (files[pos_block] == 0):
+        return
+
     found = False
-    while empty[pos_start] > 0 and pos_block > pos_start:
-        print("  trying to fill block position : ", pos_block, " with space : ", files[pos_block])
-        if (files[pos_block] > 0 and files[pos_block] <= empty[pos_start]):
-            found = True
-            print("  block position : ", pos_block, " with space : ", files[pos_block], " can be moved")
-            id_defrag.extend([pos_block for _ in range(files[pos_block])])
-            empty[pos_start] -= files[pos_block]
-            files[pos_block] = 0
-            pos_block -= 1
-        else:
-            pos_block -= 1
-
-    return pos_block, pos_start, found
-
-def move_file(id_defrag, pos_block, files, empty, empty_new_files):
     pos_start = 0
-    found = False
     while not found and pos_start < pos_block:
-        if empty[pos_start] > files[pos_block]:
+        if empty[pos_start] >= files[pos_block]:
             found = True
             empty[pos_start] -= files[pos_block]
-            empty_new_files[pos_start] = (pos_block, files[pos_block])
+            empty_id[pos_start].extend([pos_block for _ in range(files[pos_block])])
+            files_id[pos_block] = [0 for _ in range(files[pos_block])]
+            files[pos_block] = 0
         else:
             pos_start += 1
 
-def build_id_defrag(files, empty, emtpy_new_files):
-    id_defrag = []
-    pos = 0
-    for iblock in range(len(files)):
-        id_defrag.append([iblock for _ in range(files[iblock])])
-        empty_size = empty[iblock]
-        for ifile in emtpy_new_files:
-            id_defrag.append([ifile for _ in range(files[iblock])])
+def build_id_defrag(files, empty, files_id, empty_id):
+    id_defrag = files_id[0]
+    for i in range(1, len(files)):
+        id_defrag = id_defrag + empty_id[i-1] + [0 for _ in range(empty[i-1])] + files_id[i]
 
     return id_defrag
 
@@ -77,12 +61,13 @@ if __name__ == '__main__':
     elif part == '2':
         pos_start = 0
         id_defrag = []
-        found = True
-        while found:
-            id_defrag = id_defrag + [pos_start for _ in range(files[pos_start])]
-            pos_block = len(files) - 1
-            pos_block, pos_start, found = fill_empty_space(id_defrag, pos_block, pos_start, files, empty)
-            pos_start += 1
-            print(id_defrag)
+        files_id = [[i for _ in range(files[i])] for i in range(len(files))]
+        empty_id = [[] for _ in range(len(empty))]
+        pos_block = len(files) - 1
+        while sum(empty[0:pos_block]) > 0:
+            move_file(pos_block, files, empty, files_id, empty_id)
+            pos_block -= 1
+
+        id_defrag = build_id_defrag(files, empty, files_id, empty_id)
 
         print("Result of part 2: ", compute_checksum(id_defrag))
