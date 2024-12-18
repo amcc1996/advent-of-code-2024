@@ -25,6 +25,64 @@ def find_boxes(i, j, direction):
 
     return boxes
 
+def find_wide_boxes(i, j, direction):
+    i_next = i
+    j_next = j
+    wide_boxes = []
+    blocked = False
+    if direction in ['<', '>']:
+        while warehouse[i_next][j_next] == ']' or warehouse[i_next][j_next] == '[':
+            if warehouse[i_next][j_next] == '[':
+                wide_boxes.append(((i_next, j_next), (i_next, j_next + 1)))
+
+            i_next, j_next = new_pos(i_next, j_next, direction)
+
+
+        if warehouse[i_next][j_next] == '#':
+            blocked = True
+
+    elif direction in ['v', '^']:
+        if (warehouse[i_next][j_next] == '['):
+            queue = [((i_next, j_next), (i_next, j_next + 1))]
+        elif (warehouse[i_next][j_next] == ']'):
+            queue = [((i_next, j_next - 1), (i_next, j_next))]
+
+        while len(queue) > 0:
+            (i_left, j_left), (i_right, j_right) = queue.pop(0)
+            wide_boxes.append(((i_left, j_left), (i_right, j_right)))
+            i_left, j_left = new_pos(i_left, j_left, direction)
+            i_right, j_right = new_pos(i_right, j_right, direction)
+
+            if (warehouse[i_left][j_left] == '['):
+                box = ((i_left, j_left), (i_left, j_left+1))
+                if (box not in queue):
+                    queue.append(box)
+
+            elif (warehouse[i_left][j_left] == ']'):
+                box = ((i_left, j_left-1), (i_left, j_left))
+                if (box not in queue):
+                    queue.append(box)
+
+            elif (warehouse[i_left][j_left] == '#'):
+                blocked = True
+                break
+
+            if (warehouse[i_right][j_right] == '['):
+                box = ((i_right, j_right), (i_right, j_right+1))
+                if (box not in queue):
+                    queue.append(box)
+
+            elif (warehouse[i_right][j_right] == ']'):
+                box = ((i_right, j_right-1), (i_right, j_right))
+                if (box not in queue):
+                    queue.append(box)
+
+            elif (warehouse[i_right][j_right] == '#'):
+                blocked = True
+                break
+
+    return wide_boxes, blocked
+
 def move_robot(i, j, move, wareshouse):
     i_new, j_new = new_pos(i, j, move)
     if wareshouse[i_new][j_new] == '.':
@@ -53,11 +111,47 @@ def move_robot(i, j, move, wareshouse):
         else:
             return i, j
 
+def move_robot_wide_boxes(i, j, move, wareshouse):
+    i_new, j_new = new_pos(i, j, move)
+    if wareshouse[i_new][j_new] == '.':
+        wareshouse[i][j] = '.'
+        wareshouse[i_new][j_new] = '@'
+
+        return i_new, j_new
+
+    elif warehouse[i_new][j_new] == '#':
+        return i, j
+
+    elif warehouse[i_new][j_new] == '[' or warehouse[i_new][j_new] == ']':
+        wide_boxes, blocked = find_wide_boxes(i_new, j_new, move)
+        if not blocked:
+            new_boxes = []
+            for box in wide_boxes:
+                i_left, j_left = new_pos(box[0][0], box[0][1], move)
+                i_right, j_right = new_pos(box[1][0], box[1][1], move)
+                new_boxes.append(((i_left, j_left), (i_right, j_right)))
+
+            for box in wide_boxes:
+                warehouse[box[0][0]][box[0][1]] = '.'
+                warehouse[box[1][0]][box[1][1]] = '.'
+
+            for new_box in new_boxes:
+                warehouse[new_box[0][0]][new_box[0][1]] = '['
+                warehouse[new_box[1][0]][new_box[1][1]] = ']'
+
+            warehouse[i][j] = '.'
+            warehouse[i_new][j_new] = '@'
+
+            return i_new, j_new
+
+        else:
+            return i, j
+
 def compute_gps_coordinates(warehouse):
     res = 0
     for i in range(len(warehouse)):
         for j in range(len(warehouse[0])):
-            if warehouse[i][j] == 'O':
+            if warehouse[i][j] == 'O' or warehouse[i][j] == '[':
                 res += i * 100+ j
 
     return res
@@ -65,6 +159,24 @@ def compute_gps_coordinates(warehouse):
 def print_warehouse(warehouse):
     for row in warehouse:
         print("".join(row))
+
+def transform_warehouse(wareshouse):
+    new_warehouse = []
+    for i in range(len(wareshouse)):
+        new_row = []
+        for j in range(len(wareshouse[0])):
+            if wareshouse[i][j] == '#':
+                new_row.extend(['#', '#'])
+            elif wareshouse[i][j] == 'O':
+                new_row.extend(['[', ']'])
+            elif wareshouse[i][j] == '.':
+                new_row.extend(['.', '.'])
+            elif wareshouse[i][j] == '@':
+                new_row.extend(['@', '.'])
+
+        new_warehouse.append(new_row)
+
+    return new_warehouse
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
@@ -89,5 +201,19 @@ if __name__ == '__main__':
         print("Result of part 1: ", result1)
 
     elif part == '2':
+        warehouse = transform_warehouse(warehouse)
+        for i in range(len(warehouse)):
+            for j in range(len(warehouse[0])):
+                if warehouse[i][j] == '@':
+                    i_robot = i
+                    j_robot = j
+                    break
+
         result2 = 0
+        for command in commands:
+            # print(command)
+            i_robot, j_robot = move_robot_wide_boxes(i_robot, j_robot, command, warehouse)
+            # print_warehouse(warehouse)
+
+        result2 = compute_gps_coordinates(warehouse)
         print("Result of part 2: ", result2)
