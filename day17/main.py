@@ -56,15 +56,6 @@ def parse_instruction(instructions, computer, output):
     if not(opcode == 3 and pos != computer['pos']):
         computer["pos"] += 2
 
-def parse_instruction(instructions, computer, output):
-    pos = computer['pos']
-    opcode = instructions[pos]
-    literal_operand = instructions[pos + 1]
-    combo_operand = get_combo_operand(literal_operand, computer)
-    OPCODE_FUNC_MAP[opcode](literal_operand, combo_operand, computer, output)
-    if not(opcode == 3 and pos != computer['pos']):
-        computer["pos"] += 2
-
 def run_program(instructions, computer):
     output = []
     while computer['pos'] < len(instructions):
@@ -78,6 +69,65 @@ def run_program_with_checks(instructions, computer, program):
         parse_instruction(instructions, computer, output)
         output_str = ",".join([str(x) for x in output])
 
+        if len(output_str) > len(program):
+            return False, output_str
+
+        if output_str != program[0:len(output_str)]:
+            return False, output_str
+
+    return output_str == program, output_str
+
+def parse_until_output(instructions, computer):
+    output = []
+    pos_min = computer['pos']
+    pos_max = computer['pos']
+    while computer['pos'] < len(instructions):
+        if computer['pos'] + 1 > pos_max:
+            pos_max = computer['pos'] + 1
+        parse_instruction(instructions, computer, output)
+
+        if len(output) > 0:
+            break
+
+    return output[0] if len(output)>0 else None, pos_max - pos_min + 1, computer['pos'] < len(instructions)
+
+def get_computer_hash(computer):
+    return (computer['A'], computer['B'], computer['C'], computer['pos'])
+
+def run_program_with_cache(instructions, computer, program, map_state_to_instructions, map_state_instructions_to_state_output):
+    output = []
+    is_running = True
+    instructions_str = "".join([str(x) for x in instructions])
+    while is_running:
+        needs_parse = True
+        hash_computer = get_computer_hash(computer)
+        if hash_computer in map_state_to_instructions:
+            for saved_blocks in map_state_to_instructions[hash_computer]:
+                if saved_blocks == instructions_str[computer['pos']:computer['pos']+len(saved_blocks)]:
+                    computer = map_state_instructions_to_state_output[(hash_computer, saved_blocks)][0]
+                    out = map_state_instructions_to_state_output[(hash_computer, saved_blocks)][1]
+                    if out is None:
+                        is_running = False
+                    else:
+                        output.append(out)
+                    needs_parse = False
+                    break
+
+        if needs_parse:
+            save_computer = computer.copy()
+            hash_save_computer = get_computer_hash(save_computer)
+            out, n_instructions, is_running = parse_until_output(instructions, computer)
+            if is_running:
+                output.append(out)
+            instructions_block = instructions_str[save_computer['pos']:save_computer['pos']+n_instructions]
+            if hash_save_computer not in map_state_to_instructions:
+                map_state_to_instructions[hash_save_computer] = [instructions_block]
+                map_state_instructions_to_state_output[(hash_save_computer, instructions_block)] = (computer, out)
+            else:
+                map_state_to_instructions[hash_save_computer].append(instructions_block)
+                map_state_instructions_to_state_output[(hash_save_computer, instructions_block)].append((computer, out))
+
+        output_str = ",".join([str(x) for x in output])
         if len(output_str) > len(program):
             return False, output_str
 
@@ -103,14 +153,18 @@ if __name__ == '__main__':
         i = 0
         found = False
         program = ",".join([str(x) for x in instructions])
+        map_state_to_instructions = {}
+        map_state_instructions_to_state_output = {}
         while not found:
             print(i)
             computer = {'A' : i,
                         'B' : int(data[0][1].split(":")[1]),
                         'C' : int(data[0][2].split(":")[1]),
                         'pos' : 0}
-            found, output_str = run_program_with_checks(instructions, computer, program)
-            i += 1
+            found, output_str = run_program_with_cache(instructions, computer, program, map_state_to_instructions, map_state_instructions_to_state_output)
+            # found, output_str = run_program_with_checks(instructions, computer, program)
+            if not found:
+                i += 1
 
         result2 = i
         print("Result of part 2: ", result2)
