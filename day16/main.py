@@ -5,88 +5,95 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 
 from utils import get_input_filename, read_input_file
 
-def new_pos(i, j, move):
-    if move == 'v':
-        return i + 1, j
-    elif move == '^':
-        return i - 1, j
-    elif move == '>':
-        return i, j + 1
-    elif move == '<':
-        return i, j - 1
+def get_dir(i_old, j_old, i_new, j_new):
+    if i_new == i_old:
+        return 'h'
+    elif j_new == j_old:
+        return 'v'
 
-def find_boxes(i, j, direction):
-    i_next = i
-    j_next = j
-    boxes = []
-    while warehouse[i_next][j_next] == 'O':
-        boxes.append((i_next, j_next))
-        i_next, j_next = new_pos(i_next, j_next, direction)
+def solve_maze_dijkstra(maze, i_start, j_start, i_end, j_end, dir_start, n_rows, n_cols):
+    distances = [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)]
+    visited = [[False for _ in range(n_cols)] for _ in range(n_rows)]
+    previous = [[None for _ in range(n_cols)] for _ in range(n_rows)]
+    queue = [(i_start, j_start)]
+    dir_queue = [dir_start]
+    distance_queue = [0]
+    while queue:
+        pos = distance_queue.index(min(distance_queue))
+        i, j = queue.pop(pos)
+        distance = distance_queue.pop(pos)
+        dir = dir_queue.pop(pos)
+        visited[i][j] = True
+        if i == i_end and j == j_end:
+            break
 
-    return boxes
+        for i_offset, j_offset in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            i_new = i + i_offset
+            j_new = j + j_offset
+            if i_new >= 0 and i_new < n_rows and j_new >= 0 and j_new < n_cols and maze[i_new][j_new] != '#' and not visited[i_new][j_new]:
+                new_dir = get_dir(i, j, i_new, j_new)
+                if new_dir != dir:
+                    new_distance = distance + 1001
+                else:
+                    new_distance = distance + 1
 
-def move_robot(i, j, move, wareshouse):
-    i_new, j_new = new_pos(i, j, move)
-    if wareshouse[i_new][j_new] == '.':
-        wareshouse[i][j] = '.'
-        wareshouse[i_new][j_new] = '@'
+                if new_distance < distances[i_new][j_new]:
+                    distances[i_new][j_new] = new_distance
+                    previous[i_new][j_new] = (i, j)
 
-        return i_new, j_new
+                if (i_new, j_new) not in queue:
+                    queue.append((i_new, j_new))
+                    distance_queue.append(distances[i_new][j_new])
+                    dir_queue.append(new_dir)
+                else:
+                    pos = queue.index((i_new, j_new))
+                    distance_queue[pos] = distances[i_new][j_new]
+                    dir_queue[pos] = new_dir
 
-    elif warehouse[i_new][j_new] == '#':
-        return i, j
+    i = i_end
+    j = j_end
+    path = [(i_end, j_end)]
+    while i != i_start or j != j_start:
+        i, j = previous[i][j]
+        path.append((i, j))
 
-    elif warehouse[i_new][j_new] == 'O':
-        boxes = find_boxes(i_new, j_new, move)
-        i_end_new, j_end_new = new_pos(boxes[-1][0], boxes[-1][1], move)
-        if warehouse[i_end_new][j_end_new] == '.':
-            for box in boxes[::-1]:
-                i_box_new, j_box_new = new_pos(box[0], box[1], move)
-                warehouse[i_box_new][j_box_new] = 'O'
-                warehouse[box[0]][box[1]] = '.'
+    return path, distances[i_end][j_end]
 
-            warehouse[i][j] = '.'
-            warehouse[i_new][j_new] = '@'
-
-            return i_new, j_new
-
-        else:
-            return i, j
-
-def compute_gps_coordinates(warehouse):
-    res = 0
-    for i in range(len(warehouse)):
-        for j in range(len(warehouse[0])):
-            if warehouse[i][j] == 'O':
-                res += i * 100+ j
-
-    return res
-
-def print_warehouse(warehouse):
-    for row in warehouse:
+def print_maze(maze, path):
+    for i in range(len(maze)):
+        row = []
+        for j in range(len(maze[i])):
+            if (i, j) in path:
+                row.append('O')
+            else:
+                row.append(maze[i][j])
         print("".join(row))
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
-    data = read_input_file(filename)
+    data = read_input_file(filename)[0]
 
-    warehouse = [[y for y in x] for x in data[0]]
-    commands = "".join(data[1])
+    n_rows = len(data)
+    n_cols = len(data[0])
 
-    for i in range(len(warehouse)):
-        for j in range(len(warehouse[0])):
-            if warehouse[i][j] == '@':
-                i_robot = i
-                j_robot = j
-                break
+    i_end = 0
+    j_end = 0
+    i_start = 0
+    j_start = 0
+    dir_start = 'h'
+    for i in range(len(data)):
+        for j in range(len(data[i])):
+            if data[i][j] == 'S':
+                i_start = i
+                j_start = j
+            elif data[i][j] == 'E':
+                i_end = i
+                j_end = j
 
     if part == '1':
-        result1 = 0
-        for command in commands:
-            i_robot, j_robot = move_robot(i_robot, j_robot, command, warehouse)
-
-        result1 = compute_gps_coordinates(warehouse)
-        print("Result of part 1: ", result1)
+        path, cost = solve_maze_dijkstra(data, i_start, j_start, i_end, j_end, dir_start, n_rows, n_cols)
+        print_maze(data, path)
+        print("Result of part 1: ", cost)
 
     elif part == '2':
         result2 = 0
