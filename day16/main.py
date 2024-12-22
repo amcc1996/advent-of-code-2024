@@ -37,7 +37,7 @@ def solve_maze_dijkstra(maze, i_start, j_start, i_end, j_end, dir_start, n_rows,
                 else:
                     new_distance = distance + 1
 
-                if new_distance < distances[i_new][j_new]:
+                if new_distance <= distances[i_new][j_new]:
                     distances[i_new][j_new] = new_distance
                     previous[i_new][j_new] = (i, j)
 
@@ -69,6 +69,19 @@ def print_maze(maze, path):
                 row.append(maze[i][j])
         print("".join(row))
 
+def compute_cost_from_path(path, dir_start):
+    cost = len(path) - 1
+    # add 1000 for each turn
+    old_dir = dir_start
+    for i in range(1, len(path) - 1):
+        new_dir = get_dir(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1])
+        if new_dir != old_dir:
+            cost += 1000
+
+        old_dir = new_dir
+
+    return cost
+
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
     data = read_input_file(filename)[0]
@@ -94,6 +107,7 @@ if __name__ == '__main__':
         path, cost = solve_maze_dijkstra(data, i_start, j_start, i_end, j_end, dir_start, n_rows, n_cols)
         print_maze(data, path)
         print("Result of part 1: ", cost)
+        print("Cost of path: ", compute_cost_from_path(path[::-1], dir_start))
 
     elif part == '2':
         result2 = 0
