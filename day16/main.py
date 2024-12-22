@@ -6,58 +6,76 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 from utils import get_input_filename, read_input_file
 
 def get_dir(i_old, j_old, i_new, j_new):
-    if i_new == i_old:
-        return 'h'
-    elif j_new == j_old:
-        return 'v'
+    if i_new < i_old:
+        return 'u'
+    elif i_new > i_old:
+        return 'd'
+    elif j_new < j_old:
+        return 'l'
+    elif j_new > j_old:
+        return 'r'
+
+def is_corner(dir1, dir2):
+    if dir1 in ['u', 'd'] and dir2 in ['l', 'r']:
+        return True
+    elif dir1 in ['l', 'r'] and dir2 in ['u', 'd']:
+        return True
+    return False
 
 def solve_maze_dijkstra(maze, i_start, j_start, i_end, j_end, dir_start, n_rows, n_cols):
-    distances = [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)]
-    visited = [[False for _ in range(n_cols)] for _ in range(n_rows)]
-    previous = [[None for _ in range(n_cols)] for _ in range(n_rows)]
-    queue = [(i_start, j_start)]
-    dir_queue = [dir_start]
+    distances = {'u' : [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)],
+                 'd' : [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)],
+                 'l' : [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)],
+                 'r' : [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)]}
+    visited = {'u' : [[False for _ in range(n_cols)] for _ in range(n_rows)],
+               'd' : [[False for _ in range(n_cols)] for _ in range(n_rows)],
+               'l' : [[False for _ in range(n_cols)] for _ in range(n_rows)],
+               'r' : [[False for _ in range(n_cols)] for _ in range(n_rows)]}
+    previous = {'u' : [[None for _ in range(n_cols)] for _ in range(n_rows)],
+                'd' : [[None for _ in range(n_cols)] for _ in range(n_rows)],
+                'l' : [[None for _ in range(n_cols)] for _ in range(n_rows)],
+                'r' : [[None for _ in range(n_cols)] for _ in range(n_rows)]}
+    queue = [(i_start, j_start, dir_start)]
     distance_queue = [0]
     while queue:
         pos = distance_queue.index(min(distance_queue))
-        i, j = queue.pop(pos)
+        i, j, dir = queue.pop(pos)
         distance = distance_queue.pop(pos)
-        dir = dir_queue.pop(pos)
-        visited[i][j] = True
+        visited[dir][i][j] = True
         if i == i_end and j == j_end:
+            dir_end = dir
             break
 
         for i_offset, j_offset in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
             i_new = i + i_offset
             j_new = j + j_offset
-            if i_new >= 0 and i_new < n_rows and j_new >= 0 and j_new < n_cols and maze[i_new][j_new] != '#' and not visited[i_new][j_new]:
-                new_dir = get_dir(i, j, i_new, j_new)
-                if new_dir != dir:
+            dir_new = get_dir(i, j, i_new, j_new)
+            if i_new >= 0 and i_new < n_rows and j_new >= 0 and j_new < n_cols and maze[i_new][j_new] != '#' and not visited[dir_new][i_new][j_new]:
+                if is_corner(dir, dir_new):
                     new_distance = distance + 1001
                 else:
                     new_distance = distance + 1
 
-                if new_distance <= distances[i_new][j_new]:
-                    distances[i_new][j_new] = new_distance
-                    previous[i_new][j_new] = (i, j)
+                if new_distance < distances[dir_new][i_new][j_new]:
+                    distances[dir_new][i_new][j_new] = new_distance
+                    previous[dir_new][i_new][j_new] = (i, j, dir)
 
-                if (i_new, j_new) not in queue:
-                    queue.append((i_new, j_new))
-                    distance_queue.append(distances[i_new][j_new])
-                    dir_queue.append(new_dir)
+                if (i_new, j_new, dir_new) not in queue:
+                    queue.append((i_new, j_new, dir_new))
+                    distance_queue.append(distances[dir_new][i_new][j_new])
                 else:
-                    pos = queue.index((i_new, j_new))
-                    distance_queue[pos] = distances[i_new][j_new]
-                    dir_queue[pos] = new_dir
+                    pos = queue.index((i_new, j_new, dir_new))
+                    distance_queue[pos] = distances[dir_new][i_new][j_new]
 
     i = i_end
     j = j_end
+    dir = dir_end
     path = [(i_end, j_end)]
     while i != i_start or j != j_start:
-        i, j = previous[i][j]
+        i, j, dir = previous[dir][i][j]
         path.append((i, j))
 
-    return path, distances[i_end][j_end]
+    return path, distances[dir_end][i_end][j_end]
 
 def print_maze(maze, path):
     for i in range(len(maze)):
@@ -72,13 +90,13 @@ def print_maze(maze, path):
 def compute_cost_from_path(path, dir_start):
     cost = len(path) - 1
     # add 1000 for each turn
-    old_dir = dir_start
+    dir_old = dir_start
     for i in range(1, len(path) - 1):
-        new_dir = get_dir(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1])
-        if new_dir != old_dir:
+        dir_new = get_dir(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1])
+        if is_corner(dir_old, dir_new):
             cost += 1000
 
-        old_dir = new_dir
+        dir_old = dir_new
 
     return cost
 
@@ -93,7 +111,7 @@ if __name__ == '__main__':
     j_end = 0
     i_start = 0
     j_start = 0
-    dir_start = 'h'
+    dir_start = 'r'
     for i in range(len(data)):
         for j in range(len(data[i])):
             if data[i][j] == 'S':
