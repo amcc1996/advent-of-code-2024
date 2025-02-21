@@ -63,78 +63,56 @@ def run_program(instructions, computer):
 
     return ",".join([str(x) for x in output])
 
-def run_program_with_checks(instructions, computer, program):
+def run_program_until_output(A, instructions):
+    """
+    This program runs the instructions until it finds an output.
+    This is not general, and is based on a previous inspection of the input data, so that
+    we know that the initial values of B and C registers do not matter, as they are overwritten
+    by the program. In addiiton, the instruction position is initially set to 0, because the
+    program is designed to repeat running from the beggining until it finds an output instruction.
+    """
     output = []
+    computer = {'A' : A,
+                'B' : 0,
+                'C' : 0,
+                'pos' : 0}
     while computer['pos'] < len(instructions):
         parse_instruction(instructions, computer, output)
-        output_str = ",".join([str(x) for x in output])
-
-        if len(output_str) > len(program):
-            return False, output_str
-
-        if output_str != program[0:len(output_str)]:
-            return False, output_str
-
-    return output_str == program, output_str
-
-def parse_until_output(instructions, computer):
-    output = []
-    pos_min = computer['pos']
-    pos_max = computer['pos']
-    while computer['pos'] < len(instructions):
-        if computer['pos'] + 1 > pos_max:
-            pos_max = computer['pos'] + 1
-        parse_instruction(instructions, computer, output)
-
         if len(output) > 0:
             break
 
-    return output[0] if len(output)>0 else None, pos_max - pos_min + 1, computer['pos'] < len(instructions)
+    return output[0], computer['A']
 
-def get_computer_hash(computer):
-    return (computer['A'], computer['B'], computer['C'], computer['pos'])
-
-def run_program_with_cache(instructions, computer, program, map_state_to_instructions, map_state_instructions_to_state_output):
+def run_program_with_cache_and_checks(A, instructions, program, cache):
+    """
+    This code si not general, and is based on a previous inspection of the input data.
+    """
     output = []
-    is_running = True
-    instructions_str = "".join([str(x) for x in instructions])
-    while is_running:
-        needs_parse = True
-        hash_computer = get_computer_hash(computer)
-        if hash_computer in map_state_to_instructions:
-            for saved_blocks in map_state_to_instructions[hash_computer]:
-                if saved_blocks == instructions_str[computer['pos']:computer['pos']+len(saved_blocks)]:
-                    computer = map_state_instructions_to_state_output[(hash_computer, saved_blocks)][0]
-                    out = map_state_instructions_to_state_output[(hash_computer, saved_blocks)][1]
-                    if out is None:
-                        is_running = False
-                    else:
-                        output.append(out)
-                    needs_parse = False
-                    break
+    n_output = 0
+    finished = False
+    while not finished:
+        if A in cache:
+            out, A = cache[A]
+        else:
+            out, A = run_program_until_output(A, instructions)
+            cache[A] = (out, A)
 
-        if needs_parse:
-            save_computer = computer.copy()
-            hash_save_computer = get_computer_hash(save_computer)
-            out, n_instructions, is_running = parse_until_output(instructions, computer)
-            if is_running:
-                output.append(out)
-            instructions_block = instructions_str[save_computer['pos']:save_computer['pos']+n_instructions]
-            if hash_save_computer not in map_state_to_instructions:
-                map_state_to_instructions[hash_save_computer] = [instructions_block]
-                map_state_instructions_to_state_output[(hash_save_computer, instructions_block)] = (computer, out)
-            else:
-                map_state_to_instructions[hash_save_computer].append(instructions_block)
-                map_state_instructions_to_state_output[(hash_save_computer, instructions_block)].append((computer, out))
+        if n_output >= len(instructions):
+            finished = True
 
-        output_str = ",".join([str(x) for x in output])
-        if len(output_str) > len(program):
-            return False, output_str
+        elif out != instructions[n_output]:
+            finished = True
 
-        if output_str != program[0:len(output_str)]:
-            return False, output_str
+        if A == 0:
+            finished = True
 
-    return output_str == program, output_str
+        output.append(out)
+        n_output += 1
+
+    output_str = ",".join([str(x) for x in output])
+    found = program == output_str
+
+    return found, output_str
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
@@ -150,21 +128,20 @@ if __name__ == '__main__':
         print("Result of part 1: ", run_program(instructions, computer))
 
     elif part == '2':
-        i = 0
+        A = 0
         found = False
         program = ",".join([str(x) for x in instructions])
-        map_state_to_instructions = {}
-        map_state_instructions_to_state_output = {}
+        cache = {}
         while not found:
-            print(i)
-            computer = {'A' : i,
-                        'B' : int(data[0][1].split(":")[1]),
-                        'C' : int(data[0][2].split(":")[1]),
-                        'pos' : 0}
-            found, output_str = run_program_with_cache(instructions, computer, program, map_state_to_instructions, map_state_instructions_to_state_output)
-            # found, output_str = run_program_with_checks(instructions, computer, program)
-            if not found:
-                i += 1
+            found, output_str = run_program_with_cache_and_checks(A, instructions, program, cache)
+            print("{0:>10}   {1:32b}   {2:>20}".format(A, A, output_str))
 
-        result2 = i
+            # Increment the trial
+            if not found:
+                A += 1
+
+            if A == 1e7:
+                break
+
+        result2 = A
         print("Result of part 2: ", result2)
