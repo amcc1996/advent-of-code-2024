@@ -128,7 +128,7 @@ if __name__ == '__main__':
         print("Result of part 1: ", run_program(instructions, computer))
 
     elif part == '2':
-        A = 0
+        A = 2**(3 * len(instructions) - 1)
         found = False
         program = ",".join([str(x) for x in instructions])
         cache = {}
@@ -139,9 +139,6 @@ if __name__ == '__main__':
             # Increment the trial
             if not found:
                 A += 1
-
-            if A == 1e7:
-                break
 
         result2 = A
         print("Result of part 2: ", result2)
