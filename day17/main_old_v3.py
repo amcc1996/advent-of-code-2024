@@ -78,15 +78,6 @@ def run_program_with_checks(instructions, program, computer):
 
     return output_str == program, output_str
 
-def run_program_part2_until_output(A):
-    B = A % 8
-    B = B ^ 5
-    C = int(A / 2**B)
-    B = B ^ C
-    B = B ^ 6
-
-    return B % 8
-
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
     data = read_input_file(filename)
@@ -101,25 +92,45 @@ if __name__ == '__main__':
         print("Result of part 1: ", run_program(instructions, computer))
 
     elif part == '2':
+        FIRST_OCCURENCE = 1
+        ALL_OCCURENCES = 2
+        A = 2**(3 * (len(instructions) - 1))
+        A = 1
+        found = False
         program = ",".join([str(x) for x in instructions])
+        n_found = 5
+        #print_mode = FIRST_OCCURENCE
+        #print_mode = ALL_OCCURENCES
+        print_mode = None
+        n_shifts = 0 # number of 3-bit left shits
         n_parse_bits = 10 # number of bits to parse
-        map_A_to_output = [run_program_part2_until_output(A) for A in range(2**n_parse_bits)]
-        candidates = []
-        n_bit_shift = 3
-        for i in range(len(instructions)):
-            if i == 0:
-                for A, output in enumerate(map_A_to_output):
-                    if output == instructions[i]:
-                        candidates.append(A)
-            else:
-                new_candidates = []
-                for j in range(2**n_bit_shift):
-                    for A in candidates:
-                        A_trial = A + (j << (n_parse_bits + (i-1) * n_bit_shift))
-                        if map_A_to_output[A_trial >> (i * n_bit_shift)] == instructions[i]:
-                            new_candidates.append(A_trial)
+        i_parse_num = 1 # parsing number counter
+        while not found:
+            computer = {'A' : A,
+                        'B' : int(data[0][1].split(":")[1]),
+                        'C' : int(data[0][2].split(":")[1]),
+                        'pos' : 0}
+            found, output_str = run_program_with_checks(instructions, program, computer)
+            print("A: {1:>20}   {2:>32b}   {3:>20}".format(n_found, A, A, output_str))
+            # output_list = [int(x) for x in output_str.split(',')]
+            # min_len = min(len(instructions), len(output_list))
+            # if sum([a==b for a, b in zip(output_list[0:min_len],instructions[0:min_len])]) == n_found:
+            #     if print_mode == FIRST_OCCURENCE:
+            #         print("First occurencen_found = {0} found at A: {1:>20}   {2:>32b}   {3:>20}".format(n_found, A, A, output_str))
+            #         n_found += 1
+            #     elif print_mode == ALL_OCCURENCES:
+            #         print("Occurence n_found = {0} found at A: {1:>20}   {2:>32b}   {3:>20}".format(n_found, A, A, output_str))
 
-                candidates = [x for x in new_candidates]
+            # Increment the trial
+            if not found:
+                A += 1
+                # if (i_parse_num < 2**n_parse_bits):
+                #     A += 1
+                #     i_parse_num += 1
+                # else:
+                #     n_shifts += 1
+                #     A = 2**(3 * n_shifts)
+                #     i_parse_num = 0
 
-        result2 = min(candidates)
+        result2 = A
         print("Result of part 2: ", result2)
