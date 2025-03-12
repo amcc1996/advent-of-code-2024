@@ -1,76 +1,131 @@
 import os
 import sys
 
+from collections import deque
+from heapq import heappop, heappush
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 
 from utils import get_input_filename, read_input_file
 
-def find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols):
-    distances = [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)]
-    distances[i_start][j_start] = 0
-    prev = [[None for _ in range(n_cols)] for _ in range(n_rows)]
-    visited = [[False for _ in range(n_cols)] for _ in range(n_rows)]
-    queue = [(i_start, j_start)]
-    queue_distances = [distances[i_start][j_start]]
-    while len(queue) > 0:
-        pos_min = queue_distances.index(min(queue_distances))
-        i, j = queue.pop(pos_min)
-        _ = queue_distances.pop(pos_min)
-        visited[i][j] = True
+def find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols, distance_threshold=float('inf')):
+    visited = set()
+    prev = {}
+    heap = [(0, i_start, j_start, i_start, j_start)]
+    DIRECTIONS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    shortest_distance = float('inf')
+    found = False
+    while heap:
+        distance, i, j, i_prev, j_prev = heappop(heap)
+
+        if (i, j) in visited:
+            continue
+
+        visited.add((i, j))
+        prev[(i, j)] = (i_prev, j_prev)
+
         if i == i_end and j == j_end:
+            shortest_distance = distance
+            found = True
             break
-        for i_next, j_next in [(i+1, j), (i-1, j), (i, j+1), (i, j-1)]:
-            if i_next >= 0 and i_next < n_rows and j_next >= 0 and j_next < n_cols and not visited[i_next][j_next] and maze[i_next][j_next] != '#':
-                if distances[i_next][j_next] > distances[i][j] + 1:
-                    distances[i_next][j_next] = distances[i][j] + 1
-                    prev[i_next][j_next] = (i, j)
-                    if (i_next, j_next) in queue:
-                        pos = queue.index((i_next, j_next))
-                        queue_distances[pos] = distances[i_next][j_next]
 
-                if (i_next, j_next) not in queue:
-                    queue.append((i_next, j_next))
-                    queue_distances.append(distances[i_next][j_next])
+        estimated_distance = abs(i_end - i) + abs(j_end - j)
+        if distance + estimated_distance > distance_threshold:
+            break
 
-    i_path = i_end
-    j_path = j_end
-    path = [(i_path, j_path)]
-    while i_path != i_start or j_path != j_start:
-        i_path, j_path = prev[i_path][j_path]
-        path.append((i_path, j_path))
+        for i_offset, j_offset in DIRECTIONS:
+            i_new = i + i_offset
+            j_new = j + j_offset
+            if i_new >= 0 and i_new < n_rows and j_new >= 0 and j_new < n_cols and maze[i_new][j_new] != '#' and (i_new, j_new) not in visited:
+                new_distance = distance + 1
+                heappush(heap, (new_distance, i_new, j_new, i, j))
 
-    return distances[i_end][j_end], path[::-1]
+    if found:
+        i_path = i_end
+        j_path = j_end
+        path = [(i_path, j_path)]
+        while i_path != i_start or j_path != j_start:
+            i_path, j_path = prev[(i_path, j_path)]
+            path.append((i_path, j_path))
+    else:
+        path = []
+
+    return shortest_distance, path[::-1]
 
 def find_list_cheats(maze):
-    cheats = []
+    cheats = set()
     for i in range(1,len(maze)-1):
         for j in range(1,len(maze[i])-2):
-            if (maze[i][j] == '#' and maze[i][j+1] != '#') or (maze[i][j] != '#' and maze[i][j+1] == '#'):
-                cheats.append(((i, j), (i, j+1)))
-                cheats.append(((i, j+1), (i, j)))
+            if (maze[i][j] == '#' and (maze[i][j-1] != '#' and maze[i][j+1] != '#')):
+                cheats.add((i, j))
 
     for i in range(1, len(maze)-2):
         for j in range(len(maze[i])):
-            if (maze[i][j] == '#' and maze[i+1][j] != '#') or (maze[i][j] != '#' and maze[i+1][j] == '#'):
-                cheats.append(((i, j), (i+1, j)))
-                cheats.append(((i+1, j), (i, j)))
+            if (maze[i][j] == '#' and (maze[i-1][j] != '#' and maze[i+1][j] != '#')):
+                cheats.add((i, j))
 
     return cheats
 
 def apply_cheat(maze, cheat):
-    i1, j1 = cheat[0]
-    i2, j2 = cheat[1]
-    save = (maze[i1][j1], maze[i2][j2])
-    maze[i1][j1] = '.'
-    maze[i2][j2] = '.'
+    i, j = cheat
+    maze[i][j] = '.'
 
-    return save
+def undo_cheat(maze, cheat):
+    i, j = cheat
+    maze[i][j] = '#'
 
-def undo_cheat(maze, cheat, save):
-    i1, j1 = cheat[0]
-    i2, j2 = cheat[1]
-    maze[i1][j1] = save[0]
-    maze[i2][j2] = save[1]
+def find_savings(maze, i_start, j_start, i_end, j_end, min_saving):
+    base_time, path = find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols)
+    cheats = find_list_cheats(maze)
+    savings = {}
+    count_cheats = 0
+    n_cheats = len(cheats)
+    for cheat in (cheats):
+        count_cheats += 1
+        print("Processing cheat {0}/{1}".format(count_cheats, n_cheats))
+        apply_cheat(maze, cheat)
+        new_time, path = find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols, distance_threshold=base_time-min_saving)
+        undo_cheat(maze, cheat)
+        speedup = base_time - new_time
+        if speedup not in savings:
+            savings[speedup] = 1
+        else:
+            savings[speedup] += 1
+
+    return savings
+
+def find_all_shortest_distances_dijkstra(i_end, j_end, maze, n_rows, n_cols):
+    visited = set()
+    heap = [(0, i_end, j_end)]
+    DIRECTIONS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    distances = [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)]
+    while heap:
+        distance, i, j = heappop(heap)
+
+        if (i, j) in visited:
+            continue
+
+        visited.add((i, j))
+        distances[i][j] = distance
+
+        for i_offset, j_offset in DIRECTIONS:
+            i_new = i + i_offset
+            j_new = j + j_offset
+            if i_new >= 0 and i_new < n_rows and j_new >= 0 and j_new < n_cols and maze[i_new][j_new] != '#' and (i_new, j_new) not in visited:
+                new_distance = distance + 1
+                heappush(heap, (new_distance, i_new, j_new))
+
+    return distances
+
+def count_savings_greater_than(savings, threshold, verbose=False):
+    res = 0
+    for key in sorted(savings.keys(), reverse=True):
+        if verbose:
+            print("{0:3n}: {1:3n}".format(key, savings[key]))
+        if key >= threshold:
+            res += savings[key]
+
+    return res
 
 def print_maze(maze):
     for i in range(len(maze)):
@@ -99,31 +154,11 @@ if __name__ == '__main__':
                 j_end = j
 
     if part == '1':
-        base_time, path = find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols)
-        cheats = find_list_cheats(maze)
-        savings = {}
-        for i in range(len(cheats)):
-            print(i,"/",len(cheats))
-            save = apply_cheat(maze, cheats[i])
-            time, path = find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols)
-            undo_cheat(maze, cheats[i], save)
-            if cheats[i][0] in path and cheats[i][1] in path:
-                pos1 = path.index(cheats[i][0])
-                pos2 = path.index(cheats[i][1])
-                if pos2 > pos1:
-                    speedup = base_time - time
-                    if speedup not in savings:
-                        savings[speedup] = 1
-                    else:
-                        savings[speedup] += 1
+        min_saving = 0
+        savings = find_savings(maze, i_start, j_start, i_end, j_end, min_saving)
+        res = count_savings_greater_than(savings, min_saving, verbose=True)
 
-        print("Result of part 1: ")
-        res = 0
-        for key in sorted(savings.keys(), reverse=True):
-            print("{0:3n}: {1:3n}".format(key, savings[key]))
-            if key >= 100:
-                res += savings[key]
-        print(res, res/2)
+        print("Result of part 1: {0}".format(res))
 
     # elif part == '2':
     #     i_start = 0
