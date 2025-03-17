@@ -2,120 +2,96 @@ import os
 import sys
 
 from collections import deque
-from heapq import heappop, heappush
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 
 from utils import get_input_filename, read_input_file
 
-def find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols, distance_threshold=float('inf')):
+def find_path_distance(i_start, j_start, i_end, j_end, maze, n_rows, n_cols):
     visited = set()
-    prev = {}
-    heap = [(0, i_start, j_start, i_start, j_start)]
+    queue = deque([(0, i_end, j_end)])
     DIRECTIONS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-    shortest_distance = float('inf')
-    found = False
-    while heap:
-        distance, i, j, i_prev, j_prev = heappop(heap)
+    distance_grid = [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)]
+    path = []
+    while queue:
+        distance, i, j = queue.popleft()
 
         if (i, j) in visited:
             continue
 
         visited.add((i, j))
-        prev[(i, j)] = (i_prev, j_prev)
+        path.append((i, j))
+        distance_grid[i][j] = distance
 
-        if i == i_end and j == j_end:
-            shortest_distance = distance
-            found = True
-            break
-
-        estimated_distance = abs(i_end - i) + abs(j_end - j)
-        if distance + estimated_distance > distance_threshold:
-            break
+        if i == i_start and j == j_start:
+            return distance_grid, path[::-1]
 
         for i_offset, j_offset in DIRECTIONS:
             i_new = i + i_offset
             j_new = j + j_offset
             if i_new >= 0 and i_new < n_rows and j_new >= 0 and j_new < n_cols and maze[i_new][j_new] != '#' and (i_new, j_new) not in visited:
-                new_distance = distance + 1
-                heappush(heap, (new_distance, i_new, j_new, i, j))
+                queue.append((distance + 1, i_new, j_new))
 
-    if found:
-        i_path = i_end
-        j_path = j_end
-        path = [(i_path, j_path)]
-        while i_path != i_start or j_path != j_start:
-            i_path, j_path = prev[(i_path, j_path)]
-            path.append((i_path, j_path))
-    else:
-        path = []
+    return distance_grid, path[::-1]
 
-    return shortest_distance, path[::-1]
+def print_path_distance(distance_grid, maze):
+    for i in range(len(distance_grid)):
+        for j in range(len(distance_grid[i])):
+            if distance_grid[i][j] == float('inf'):
+                print("  #", end="")
+            else:
+                print(f"{distance_grid[i][j]:3d}", end="")
+        print()
 
-def find_list_cheats(maze):
-    cheats = set()
-    for i in range(1,len(maze)-1):
-        for j in range(1,len(maze[i])-2):
-            if (maze[i][j] == '#' and (maze[i][j-1] != '#' and maze[i][j+1] != '#')):
-                cheats.add((i, j))
+def find_cheats(i_path, j_path, maze, n_rows, n_cols, cheat_length):
+    DIRECTIONS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    reachable_points = set()
+    for i_offset in range(-cheat_length, cheat_length + 1):
+        i_new = i_path + i_offset
+        if i_new < 0 or i_new >= n_rows:
+            continue
+        for j_offset in range(-cheat_length, cheat_length + 1):
+            j_new = j_path + j_offset
+            if j_new < 0 or j_new >= n_cols:
+                continue
 
-    for i in range(1, len(maze)-2):
-        for j in range(len(maze[i])):
-            if (maze[i][j] == '#' and (maze[i-1][j] != '#' and maze[i+1][j] != '#')):
-                cheats.add((i, j))
+            # Unreachable point in the cheat duration
+            distance = abs(i_offset) + abs(j_offset)
+            if distance > cheat_length:
+                continue
 
-    return cheats
+            # Reachable point
+            if maze[i_new][j_new] != '#':
+                reachable_points.add((i_new, j_new))
 
-def apply_cheat(maze, cheat):
-    i, j = cheat
-    maze[i][j] = '.'
+    return reachable_points
 
-def undo_cheat(maze, cheat):
-    i, j = cheat
-    maze[i][j] = '#'
-
-def find_savings(maze, i_start, j_start, i_end, j_end, min_saving):
-    base_time, path = find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols)
-    cheats = find_list_cheats(maze)
+def compute_shortcut_savings(path, distance_grid, n_rows, n_cols, cheat_length):
+    path_length = len(path) - 1
     savings = {}
-    count_cheats = 0
-    n_cheats = len(cheats)
-    for cheat in (cheats):
-        count_cheats += 1
-        print("Processing cheat {0}/{1}".format(count_cheats, n_cheats))
-        apply_cheat(maze, cheat)
-        new_time, path = find_path_dijkstra(i_start, j_start, i_end, j_end, maze, n_rows, n_cols, distance_threshold=base_time-min_saving)
-        undo_cheat(maze, cheat)
-        speedup = base_time - new_time
-        if speedup not in savings:
-            savings[speedup] = 1
-        else:
-            savings[speedup] += 1
+    used_cheats = set()
+    for distance_start, (i_path, j_path) in enumerate(path):
+        cheats = find_cheats(i_path, j_path, maze, n_rows, n_cols, cheat_length)
+        for i_end_cheat, j_end_cheat in cheats:
+            if distance_grid[i_end_cheat][j_end_cheat] >= distance_grid[i_path][j_path]:
+                continue
+
+            new_distance = distance_start + abs(i_end_cheat-i_path) + abs(j_end_cheat-j_path) + distance_grid[i_end_cheat][j_end_cheat]
+            speedup = path_length - new_distance
+
+            if speedup <= 0:
+                continue
+
+            if (i_path, j_path, i_end_cheat, j_end_cheat) in used_cheats:
+                continue
+
+            used_cheats.add((i_path, j_path, i_end_cheat, j_end_cheat))
+            if speedup not in savings:
+                savings[speedup] = 1
+            else:
+                savings[speedup] += 1
 
     return savings
-
-def find_all_shortest_distances_dijkstra(i_end, j_end, maze, n_rows, n_cols):
-    visited = set()
-    heap = [(0, i_end, j_end)]
-    DIRECTIONS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-    distances = [[float('inf') for _ in range(n_cols)] for _ in range(n_rows)]
-    while heap:
-        distance, i, j = heappop(heap)
-
-        if (i, j) in visited:
-            continue
-
-        visited.add((i, j))
-        distances[i][j] = distance
-
-        for i_offset, j_offset in DIRECTIONS:
-            i_new = i + i_offset
-            j_new = j + j_offset
-            if i_new >= 0 and i_new < n_rows and j_new >= 0 and j_new < n_cols and maze[i_new][j_new] != '#' and (i_new, j_new) not in visited:
-                new_distance = distance + 1
-                heappush(heap, (new_distance, i_new, j_new))
-
-    return distances
 
 def count_savings_greater_than(savings, threshold, verbose=False):
     res = 0
@@ -143,7 +119,6 @@ if __name__ == '__main__':
     j_end = 0
     i_start = 0
     j_start = 0
-    dir_start = 'h'
     for i in range(len(maze)):
         for j in range(len(maze[i])):
             if maze[i][j] == 'S':
@@ -154,24 +129,21 @@ if __name__ == '__main__':
                 j_end = j
 
     if part == '1':
-        min_saving = 0
-        savings = find_savings(maze, i_start, j_start, i_end, j_end, min_saving)
+        cheat_length = 2
+        min_saving = 100
+        distances, path = find_path_distance(i_start, j_start, i_end, j_end, maze, n_rows, n_cols)
+        #print_path_distance(distances, maze)
+        savings = compute_shortcut_savings(path, distances, n_rows, n_cols, cheat_length)
         res = count_savings_greater_than(savings, min_saving, verbose=True)
 
         print("Result of part 1: {0}".format(res))
 
-    # elif part == '2':
-    #     i_start = 0
-    #     j_start = 0
-    #     i_end = n_rows - 1
-    #     j_end = n_cols - 1
-    #     for iobstacle, line in enumerate(data):
-    #         i = int(line.split(",")[0])
-    #         j = int(line.split(",")[1])
-    #         obstacle[i][j] = True
-    #         grid = [[False for _ in range(n_cols)] for _ in range(n_rows)]
-    #         area = bucket_fill(grid, obstacle, i_start, j_start, n_rows, n_cols)
-    #         if area < n_rows * n_cols - (iobstacle + 1) and not grid[i_end][j_end]:
-    #             break
+    elif part == '2':
+        cheat_length = 20
+        min_saving = 100
+        distances, path = find_path_distance(i_start, j_start, i_end, j_end, maze, n_rows, n_cols)
+        # print_path_distance(distances, maze)
+        savings = compute_shortcut_savings(path, distances, n_rows, n_cols, cheat_length)
+        res = count_savings_greater_than(savings, min_saving, verbose=True)
 
-    #     print("Result of part 2: {0},{1}".format(i, j))
+        print("Result of part 2: {0}".format(res))
