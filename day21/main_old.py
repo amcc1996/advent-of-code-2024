@@ -19,13 +19,12 @@ def convert_relative_pos_to_directions(i_start, j_start, i_end, j_end, keypad):
         vertical_dir_string += abs(i_end - i_start) * '^'
 
     if i_end == i_start:
-        return [horizontal_dir_string]
+        return horizontal_dir_string
 
     elif j_end == j_start:
-        return [vertical_dir_string]
+        return vertical_dir_string
 
     else:
-        dir_string_list = []
         path = []
         j_sign = 1 if j_end > j_start else -1
         for j in range(abs(j_end - j_start) + 1):
@@ -36,21 +35,9 @@ def convert_relative_pos_to_directions(i_start, j_start, i_end, j_end, keypad):
             path.append((i_start + i * i_sign, j_end))
 
         if not any([keypad[i][j] is None for i, j in path]):
-            dir_string_list.append(horizontal_dir_string + vertical_dir_string)
-
-        path = []
-        i_sign = 1 if i_end > i_start else -1
-        for i in range(abs(i_end - i_start) + 1):
-            path.append((i_start + i * i_sign, j_start))
-
-        j_sign = 1 if j_end > j_start else -1
-        for j in range(abs(j_end - j_start) + 1):
-            path.append((i_end, j_start + j * j_sign))
-
-        if not any([keypad[i][j] is None for i, j in path]):
-            dir_string_list.append(vertical_dir_string + horizontal_dir_string)
-
-        return dir_string_list
+            return horizontal_dir_string + vertical_dir_string
+        else:
+            return vertical_dir_string + horizontal_dir_string
 
 def initialise_map_number_and_position_to_directions():
     numbers = [x for y in NUMERICAL_KEYPAD for x in y if x is not None]
@@ -70,7 +57,7 @@ def initialise_map_number_and_position_to_directions():
                     if NUMERICAL_KEYPAD[k][l] is None:
                         continue
 
-                    map_number_and_position_to_directions[NUMERICAL_KEYPAD[i][j]][NUMERICAL_KEYPAD[k][l]] = [x + 'A' for x in convert_relative_pos_to_directions(k, l, i, j, NUMERICAL_KEYPAD)]
+                    map_number_and_position_to_directions[NUMERICAL_KEYPAD[i][j]][NUMERICAL_KEYPAD[k][l]] = convert_relative_pos_to_directions(k, l, i, j, NUMERICAL_KEYPAD) + 'A'
 
     return map_number_and_position_to_directions
 
@@ -92,91 +79,41 @@ def initialise_map_direction_and_position_to_directions():
                     if DIRECTIONAL_KEYPAD[k][l] is None:
                         continue
 
-                    map_direction_and_position_to_directions[DIRECTIONAL_KEYPAD[i][j]][DIRECTIONAL_KEYPAD[k][l]] = [x + 'A' for x in convert_relative_pos_to_directions(k, l, i, j, DIRECTIONAL_KEYPAD)]
+                    map_direction_and_position_to_directions[DIRECTIONAL_KEYPAD[i][j]][DIRECTIONAL_KEYPAD[k][l]] = convert_relative_pos_to_directions(k, l, i, j, DIRECTIONAL_KEYPAD) + 'A'
 
     return map_direction_and_position_to_directions
 
 
 def parse_num_code(code, map_number_and_position_to_directions):
-    sequence_list = ['']
+    sequence = ''
     start_pos = 'A'
     for char in code:
-        parsed_code = map_number_and_position_to_directions[char][start_pos]
-        aux = []
-        for sequence in sequence_list:
-            for parsed in parsed_code:
-                aux.append(sequence + parsed)
-        sequence_list = [x for x in aux]
+        sequence += map_number_and_position_to_directions[char][start_pos]
         start_pos = char
 
-    return sequence_list
+    return sequence
 
 def parse_dir_code(code, map_direction_and_position_to_directions):
-    sequence_list = ['']
+    sequence = ''
     start_pos = 'A'
     for char in code:
-        parsed_code = map_direction_and_position_to_directions[char][start_pos]
-        aux = []
-        for sequence in sequence_list:
-            for parsed in parsed_code:
-                aux.append(sequence + parsed)
-        sequence_list = [x for x in aux]
+        sequence += map_direction_and_position_to_directions[char][start_pos]
         start_pos = char
 
-    return sequence_list
+    return sequence
 
 def compute_sequence_buttons(code, map_number_and_position_to_directions, map_direction_and_position_to_directions):
+    print(" ")
     num_code = code
-    dir_code_robot_1_list = parse_num_code(num_code, map_number_and_position_to_directions)
-    dir_code_robot_2_list = []
-    for dir_code_robot_1 in dir_code_robot_1_list:
-        dir_code_robot_2 = parse_dir_code(dir_code_robot_1, map_direction_and_position_to_directions)
-        dir_code_robot_2_list.extend(dir_code_robot_2)
-    dir_code_me_list = []
-    for dir_code_robot_2 in dir_code_robot_2_list:
-        dir_code_me = parse_dir_code(dir_code_robot_2, map_direction_and_position_to_directions)
-        dir_code_me_list.extend(dir_code_me)
+    print("Num code: {0}".format(num_code))
+    dir_code_robot_1 = parse_num_code(num_code, map_number_and_position_to_directions)
+    print("Dir code robot 1: {0}".format(dir_code_robot_1))
+    dir_code_robot_2 = parse_dir_code(dir_code_robot_1, map_direction_and_position_to_directions)
+    print("Dir code robot 2: {0}".format(dir_code_robot_2))
+    dir_code_me = parse_dir_code(dir_code_robot_2, map_direction_and_position_to_directions)
+    print("Dir code me: {0}".format(dir_code_me))
 
-    # Find the shortest code
-    min_length = float('inf')
-    for dir_code_me in dir_code_me_list:
-        if len(dir_code_me) < min_length:
-            min_length = len(dir_code_me)
-            min_dir_code_me = dir_code_me
-
-    return min_dir_code_me
-
-def compute_sequence_buttons_part2(code, map_number_and_position_to_directions, map_direction_and_position_to_directions):
-    n_intermediate_robots = 2
-
-    num_code = code
-    dir_code_robot_1_list = parse_num_code(num_code, map_number_and_position_to_directions)
-    print(1, len(code))
-    print(len(dir_code_robot_1_list), len(dir_code_robot_1_list[0]))
-
-    dir_code_robot_i_input_list = [x for x in dir_code_robot_1_list]
-    for i in range(n_intermediate_robots):
-        dir_code_robot_i_output_list = []
-        for dir_code_robot_i_input in dir_code_robot_i_input_list:
-            dir_code_robot_i_output = parse_dir_code(dir_code_robot_i_input, map_direction_and_position_to_directions)
-            dir_code_robot_i_output_list.extend(dir_code_robot_i_output)
-
-        dir_code_robot_i_input_list = [x for x in dir_code_robot_i_output_list]
-        print(len(dir_code_robot_i_output_list), len(dir_code_robot_i_output_list[0]))
-
-    dir_code_me_list = []
-    for dir_code_robot_2 in dir_code_robot_i_output_list:
-        dir_code_me = parse_dir_code(dir_code_robot_2, map_direction_and_position_to_directions)
-        dir_code_me_list.extend(dir_code_me)
-
-    # Find the shortest code
-    min_length = float('inf')
-    for dir_code_me in dir_code_me_list:
-        if len(dir_code_me) < min_length:
-            min_length = len(dir_code_me)
-            min_dir_code_me = dir_code_me
-
-    return min_dir_code_me
+    return dir_code_me
 
 def print_map(map):
     for key in map:
@@ -217,11 +154,12 @@ if __name__ == '__main__':
 
         print("Result of part 1: {0}".format(res))
 
-    elif part == '2':
-        res = 0
-        for code in data:
-            sequence = compute_sequence_buttons_part2(code, map_number_and_position_to_directions, map_direction_and_position_to_directions)
-            res += compute_complexity(code, sequence)
-            print("Code: {0}, Sequence: {1}, Length: {2}, Num: {3}".format(code, sequence, len(sequence), int(code.split('A')[0])))
+    # elif part == '2':
+    #     cheat_length = 20
+    #     min_saving = 100
+    #     distances, path = find_path_distance(i_start, j_start, i_end, j_end, maze, n_rows, n_cols)
+    #     # print_path_distance(distances, maze)
+    #     savings = compute_shortcut_savings(path, distances, n_rows, n_cols, cheat_length)
+    #     res = count_savings_greater_than(savings, min_saving, verbose=True)
 
-        print("Result of part 1: {0}".format(res))
+    #     print("Result of part 2: {0}".format(res))
