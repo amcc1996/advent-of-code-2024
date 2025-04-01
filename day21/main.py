@@ -185,6 +185,15 @@ def compute_sequence_buttons_part2(code, map_number_and_position_to_directions, 
 
     return min_dir_code_me
 
+def print_map(map):
+    for key in map:
+        print(key)
+        for key2 in map[key]:
+            print(" ", key2, map[key][key2])
+
+def compute_complexity(code, sequence):
+    return len(sequence) * int(code.split('A')[0])
+
 def convert_dir_code_to_blocks(dir_code):
     """This function converts a direction code to a list of blocks ending in A.
     Powered by co-pilot.
@@ -303,14 +312,41 @@ def compute_minimal_complexity_part2_using_blocks_dfs(num_code, n_intermediate_p
     print(num, min_length)
     return num * min_length
 
-def print_map(map):
-    for key in map:
-        print(key)
-        for key2 in map[key]:
-            print(" ", key2, map[key][key2])
+@functools.cache
+def compute_shortest_length(dir_code, depth):
+    parsed_code_blocks = parse_dir_code_block_memoized(dir_code)
+    if depth == 1:
+        return min([length_dir_code_block(x) for x in parsed_code_blocks])
+    else:
+        list_lengths = []
+        for parsed_blocks in parsed_code_blocks:
+            length = 0
+            for block, count in parsed_blocks.items():
+                length += count * compute_shortest_length(block, depth - 1)
 
-def compute_complexity(code, sequence):
-    return len(sequence) * int(code.split('A')[0])
+            list_lengths.append(length)
+
+        return min(list_lengths)
+
+def compute_minimal_complexity_part2_using_optimal_length_recursion(num_code, n_intermediate_pads=25):
+    """Impossible.
+    """
+    num = int(code.split('A')[0])
+    depth = 0
+
+    dir_code_robot_1_list = parse_num_code(num_code, map_number_and_position_to_directions)
+    dir_code_robot_1_list_blocks = [convert_dir_code_to_blocks(x) for x in dir_code_robot_1_list]
+
+    list_lengths = []
+    for blocks in dir_code_robot_1_list_blocks:
+        length = 0
+        for block, count in blocks.items():
+            length += count * compute_shortest_length(block, n_intermediate_pads)
+
+        list_lengths.append(length)
+
+    print(num, min(list_lengths))
+    return num * min(list_lengths)
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
@@ -367,6 +403,7 @@ if __name__ == '__main__':
 
         res = 0
         for code in data:
-            res += compute_minimal_complexity_part2_using_blocks_dfs(code, n_intermediate_pads=4)
+            # res += compute_minimal_complexity_part2_using_blocks_dfs(code, n_intermediate_pads=4)
+            res += compute_minimal_complexity_part2_using_optimal_length_recursion(code, n_intermediate_pads=25)
 
         print("Result of part 2: {0}".format(res))
