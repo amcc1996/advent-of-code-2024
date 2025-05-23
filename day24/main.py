@@ -1,6 +1,8 @@
 import os
 import sys
 
+from collections import deque
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 
 from utils import get_input_filename, read_input_file
@@ -21,21 +23,25 @@ MAP_OPERATIONS = {
 }
 
 def parse_data(data):
-    wires = {}
+    input_wires = {}
     for line in data[0]:
         line_split = line.split(':')
-        wires[line_split[0]] = int(line_split[1].strip())
+        input_wires[line_split[0]] = int(line_split[1].strip())
 
     gates = []
+    map_output_wire_to_gate = {}
+    n_gates = 0
     for line in data[1]:
         line_split = line.split(' ')
         wire_input1 = line_split[0]
         op = MAP_OPERATIONS[line_split[1]]
         wire_input2 = line_split[2]
         wire_output = line_split[4]
+        n_gates += 1
         gates.append((wire_input1, wire_input2, op, wire_output))
+        map_output_wire_to_gate[wire_output] = n_gates - 1
 
-    return wires, gates
+    return input_wires, gates, map_output_wire_to_gate
 
 def compute_number(wires):
     num = 0
@@ -47,23 +53,36 @@ def compute_number(wires):
 
     return num
 
-def run_circuit(wires, gates):
-    n_gates = len(gates)
-    count = 0
-    gate_done = [False] * n_gates
-    while count < n_gates:
-        for i in range(n_gates):
-            wire_input1, wire_input2, op, wire_output = gates[i]
-            if (wire_input1 in wires and wire_input2 in wires) and not gate_done[i]:
-                wires[wire_output] = op(wires[wire_input1], wires[wire_input2])
-                gate_done[i] = True
-                count += 1
+def run_circuit(input_wires, gates, map_output_wire_to_gate):
+    queue = deque()
+    wires_values = {}
+    all_wires = find_all_wires(input_wires, gates)
+    for wire in all_wires:
+        queue.append(wire)
+        if wire in input_wires:
+            wires_values[wire] = input_wires[wire]
+        else:
+            wires_values[wire] = None
 
-    return compute_number(wires)
+    n_iter = 0
+    while queue:
+        n_iter += 1
+        wire = queue.popleft()
+        if wires_values[wire] is None:
+            id_gate = map_output_wire_to_gate[wire]
+            wire_input1, wire_input2, op, wire_output = gates[id_gate]
+            print("Processing gate {0}: {1} = {2}({3}, {4})".format(id_gate, wire_output, op.__name__, wire_input1, wire_input2))
+            if (wires_values[wire_input1] is not None) and (wires_values[wire_input2] is not None):
+                wires_values[wire] = op(wires_values[wire_input1], wires_values[wire_input2])
+            else:
+                queue.append(wire)
+                continue
 
-def find_all_wires(wires, gates):
+    return compute_number(wires_values)
+
+def find_all_wires(input_wires, gates):
     all_wires = set()
-    for wire in wires:
+    for wire in input_wires:
         all_wires.add(wire)
 
     for gate in gates:
@@ -72,7 +91,7 @@ def find_all_wires(wires, gates):
         all_wires.add(wire_input2)
         all_wires.add(wire_output)
 
-    return all_wires
+    return sorted(all_wires)
 
 def extract_output_wires(all_wires):
     output_wires = []
@@ -102,77 +121,95 @@ def find_output_gate_dependency(output_wire, gates):
 
     return output_gate_dependency_id
 
-def check_bit_sum(i_bit, n_bits, gates):
+def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
     initial_wires = {}
-    for i in range(n_bits):
-        initial_wires['x' + str(i)] = 0
-        initial_wires['y' + str(i)] = 0
+    if i_bit < 10:
+        i_bit_str = '0' + str(i_bit)
+    else:
+        i_bit_str = str(i_bit)
 
-    output_wire_1 = 'z' + str(i_bit)
-    output_wire_2 = 'z' + str(i_bit + 1)
+    for i in range(n_bits):
+        if i < 10:
+            initial_wires['x0' + str(i)] = 0
+            initial_wires['y0' + str(i)] = 0
+        else:
+            initial_wires['x' + str(i)] = 0
+            initial_wires['y' + str(i)] = 0
 
     # x = 0, y = 0
     wires = initial_wires.copy()
-    run_circuit(initial_wires, gates)
-    if not (wires[output_wire_1] == 0 and wires[output_wire_2] == 0):
+    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    if number != 0:
+        print("Error in bit {0}: case 1".format(i_bit))
+        print(wires)
+        print(number)
         return False
 
     # x = 1, y = 0
     wires = initial_wires.copy()
-    wires['x' + str(i_bit)] = 1
-    run_circuit(initial_wires, gates)
-    if not (wires[output_wire_1] == 1 and wires[output_wire_2] == 0):
+    wires['x' + i_bit_str] = 1
+    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    if number != 2 ** i_bit:
+        print("Error in bit {0}: case 2".format(i_bit))
+        print(wires)
+        print(number)
         return False
 
     # x = 0, y = 1
     wires = initial_wires.copy()
-    wires['y' + str(i_bit)] = 1
-    run_circuit(initial_wires, gates)
-    if not (wires[output_wire_1] == 1 and wires[output_wire_2] == 0):
+    wires['y' + i_bit_str] = 1
+    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    if number != 2 ** i_bit:
+        print("Error in bit {0}: case 3".format(i_bit))
+        print(wires)
+        print(number)
         return False
 
     # x = 1, y = 1
     wires = initial_wires.copy()
-    wires['x' + str(i_bit)] = 1
-    wires['y' + str(i_bit)] = 1
-    run_circuit(initial_wires, gates)
-    if not (wires[output_wire_1] == 0 and wires[output_wire_2] == 1):
-        return False
+    wires['x' + i_bit_str] = 1
+    wires['y' + i_bit_str] = 1
+    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    if number != 2 ** (i_bit + 1):
+        print("Error in bit {0}: case 4".format(i_bit))
+        print(wires)
+        print(number)
+        return True
 
     return True
 
-def find_wrong_bits(n_bits, gates):
+def find_wrong_bits(n_bits, gates, map_output_wire_to_gate):
     wrong_bits = set()
     for i_bit in range(n_bits):
         print("Checking bit {0}".format(i_bit))
-        if not check_bit_sum(i_bit, n_bits, gates):
+        if not check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
             wrong_bits.add(i_bit)
 
-    return wrong_bits
+    return sorted(wrong_bits)
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
     data = read_input_file(filename)
-    wires, gates = parse_data(data)
+    input_wires, gates, map_output_wire_to_gate = parse_data(data)
 
     if part == '1':
-        res = run_circuit(wires, gates)
+       res = run_circuit(input_wires, gates, map_output_wire_to_gate)
 
-        print("Result of part 1: {0}".format(res))
+       print("Result of part 1: {0}".format(res))
 
     elif part == '2':
-        n_bits = sum([1 for wire in wires if wire[0] == 'x'])
-        all_wires = find_all_wires(wires, gates)
+        n_bits = sum([1 for wire in input_wires if wire[0] == 'x'])
+        all_wires = find_all_wires(input_wires, gates)
         output_wires = extract_output_wires(all_wires)
-        # print("Output wires: {0}".format(output_wires))
+        print("Output wires: {0}".format(output_wires))
         output_wires_dependency_id = [find_output_gate_dependency(x, gates) for x in output_wires]
-        # for output_wire, output_wire_dependency_id in zip(output_wires, output_wires_dependency_id):
-        #     output_wire_dependency = [gates[x][3] for x in output_wire_dependency_id]
-        #     print("Output wire {0} dependency: {1}".format(output_wire, output_wire_dependency))
+        for output_wire, output_wire_dependency_id in zip(output_wires, output_wires_dependency_id):
+            output_wire_dependency = [gates[x][3] for x in output_wire_dependency_id]
+            print("Output wire {0} dependency: {1}".format(output_wire, output_wire_dependency))
 
 
-        print(find_wrong_bits(n_bits, gates))
+        print(find_wrong_bits(n_bits, gates, map_output_wire_to_gate))
 
-        res = 0
+    #     res = 0
 
-        print("Result of part 2: {0}".format(res))
+    #     print("Result of part 2: {0}".format(res))
