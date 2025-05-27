@@ -71,7 +71,6 @@ def run_circuit(input_wires, gates, map_output_wire_to_gate):
         if wires_values[wire] is None:
             id_gate = map_output_wire_to_gate[wire]
             wire_input1, wire_input2, op, wire_output = gates[id_gate]
-            print("Processing gate {0}: {1} = {2}({3}, {4})".format(id_gate, wire_output, op.__name__, wire_input1, wire_input2))
             if (wires_values[wire_input1] is not None) and (wires_values[wire_input2] is not None):
                 wires_values[wire] = op(wires_values[wire_input1], wires_values[wire_input2])
             else:
@@ -140,9 +139,6 @@ def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
     wires = initial_wires.copy()
     number = run_circuit(wires, gates, map_output_wire_to_gate)
     if number != 0:
-        print("Error in bit {0}: case 1".format(i_bit))
-        print(wires)
-        print(number)
         return False
 
     # x = 1, y = 0
@@ -150,9 +146,6 @@ def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
     wires['x' + i_bit_str] = 1
     number = run_circuit(wires, gates, map_output_wire_to_gate)
     if number != 2 ** i_bit:
-        print("Error in bit {0}: case 2".format(i_bit))
-        print(wires)
-        print(number)
         return False
 
     # x = 0, y = 1
@@ -160,9 +153,6 @@ def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
     wires['y' + i_bit_str] = 1
     number = run_circuit(wires, gates, map_output_wire_to_gate)
     if number != 2 ** i_bit:
-        print("Error in bit {0}: case 3".format(i_bit))
-        print(wires)
-        print(number)
         return False
 
     # x = 1, y = 1
@@ -171,9 +161,6 @@ def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
     wires['y' + i_bit_str] = 1
     number = run_circuit(wires, gates, map_output_wire_to_gate)
     if number != 2 ** (i_bit + 1):
-        print("Error in bit {0}: case 4".format(i_bit))
-        print(wires)
-        print(number)
         return True
 
     return True
@@ -181,11 +168,26 @@ def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
 def find_wrong_bits(n_bits, gates, map_output_wire_to_gate):
     wrong_bits = set()
     for i_bit in range(n_bits):
-        print("Checking bit {0}".format(i_bit))
         if not check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
             wrong_bits.add(i_bit)
 
     return sorted(wrong_bits)
+
+def find_swapped_wires(wrong_bits, n_bits, gates, map_output_wire_to_gate, output_wires_dependency_id):
+    candidates = set()
+    for wrong_bit in wrong_bits:
+        if wrong_bit < 10:
+            i_bit_str = '0' + str(wrong_bit)
+        else:
+            i_bit_str = str(wrong_bit)
+
+        output_wire = 'z' + i_bit_str
+        for id_gate in output_wires_dependency_id[output_wire]:
+            if wire[0] not in ['x', 'y']:
+                candidates.add(gates[id_gate][3])
+
+    print(candidates)
+    print(len(candidates))
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
@@ -201,14 +203,15 @@ if __name__ == '__main__':
         n_bits = sum([1 for wire in input_wires if wire[0] == 'x'])
         all_wires = find_all_wires(input_wires, gates)
         output_wires = extract_output_wires(all_wires)
-        print("Output wires: {0}".format(output_wires))
+        # print("Output wires: {0}".format(output_wires))
         output_wires_dependency_id = [find_output_gate_dependency(x, gates) for x in output_wires]
-        for output_wire, output_wire_dependency_id in zip(output_wires, output_wires_dependency_id):
-            output_wire_dependency = [gates[x][3] for x in output_wire_dependency_id]
-            print("Output wire {0} dependency: {1}".format(output_wire, output_wire_dependency))
+        # for output_wire, output_wire_dependency_id in zip(output_wires, output_wires_dependency_id):
+        #     output_wire_dependency = [gates[x][3] for x in output_wire_dependency_id]
+        #     print("Output wire {0} dependency: {1}".format(output_wire, output_wire_dependency))
 
-
-        print(find_wrong_bits(n_bits, gates, map_output_wire_to_gate))
+        wrong_bits = find_wrong_bits(n_bits, gates, map_output_wire_to_gate)
+        print(wrong_bits)
+        find_swapped_wires(wrong_bits, n_bits, gates, map_output_wire_to_gate, output_wires_dependency_id)
 
     #     res = 0
 
