@@ -2,6 +2,7 @@ import os
 import sys
 
 from collections import deque
+from itertools import combinations
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 
@@ -23,6 +24,22 @@ MAP_OPERATIONS = {
 }
 
 def parse_data(data):
+    '''Parse the input data into input wires, gates, and a mapping of output wires to gate indices.
+
+    Parameters
+    ----------
+    data : list of list of str
+        The input data, where the first part contains input wires and the second part contains gates.
+
+    Returns
+    -------
+    input_wires : dict[str, int]
+        A dictionary mapping input wire names to their integer values.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+    map_output_wire_to_gate : dict[str, int]
+        A dictionary mapping output wire names to their corresponding gate indices.
+    '''
     input_wires = {}
     for line in data[0]:
         line_split = line.split(':')
@@ -44,6 +61,19 @@ def parse_data(data):
     return input_wires, gates, map_output_wire_to_gate
 
 def compute_number(wires):
+    '''Compute the integer value represented by the wires.
+
+    It only requires the output wires starting with z.
+
+    Parameters
+    ----------
+    wires : dict[str, int]
+        A dictionary mapping wire names to their integer values.
+    Returns
+    -------
+    int
+        The computed integer value based on the wires.
+    '''
     num = 0
     for wire in wires:
         if wire[0] == 'z':
@@ -54,6 +84,22 @@ def compute_number(wires):
     return num
 
 def run_circuit(input_wires, gates, map_output_wire_to_gate):
+    '''Run the circuit with the given input wires and gates.
+
+    Parameters
+    ----------
+    input_wires : dict[str, int]
+        A dictionary mapping input wire names to their integer values.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+    map_output_wire_to_gate : dict[str, int]
+        A dictionary mapping output wire names to their corresponding gate indices.
+
+    Returns
+    -------
+    int
+        The computed integer value based on the output wires.
+    '''
     queue = deque()
     wires_values = {}
     all_wires = find_all_wires(input_wires, gates)
@@ -80,6 +126,20 @@ def run_circuit(input_wires, gates, map_output_wire_to_gate):
     return compute_number(wires_values)
 
 def find_all_wires(input_wires, gates):
+    '''Find all unique wires used in the circuit.
+
+    Parameters
+    ----------
+    input_wires : dict[str, int]
+        A dictionary mapping input wire names to their integer values.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+
+    Returns
+    -------
+    list[str]
+        A sorted list of all unique wire names used in the circuit.
+    '''
     all_wires = set()
     for wire in input_wires:
         all_wires.add(wire)
@@ -93,6 +153,18 @@ def find_all_wires(input_wires, gates):
     return sorted(all_wires)
 
 def extract_output_wires(all_wires):
+    '''Extract output wires from the list of all wires. Output wires are those that start with 'z'.
+
+    Parameters
+    ----------
+    all_wires : list[str]
+        A sorted list of all unique wire names used in the circuit.
+
+    Returns
+    -------
+    list[str]
+        A sorted list of output wire names, which are those that start with 'z'.
+    '''
     output_wires = []
     for wire in all_wires:
         if wire[0] == 'z':
@@ -103,6 +175,20 @@ def extract_output_wires(all_wires):
     return output_wires
 
 def find_output_gate_dependency(output_wire, gates):
+    '''For a given wire, find the indices of gates which it depends on.
+
+    Parameters
+    ----------
+    output_wire : str
+        The output wire for which to find the gate dependencies.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+
+    Returns
+    -------
+    set[int]
+        A set of indices of gates that the output wire depends on.
+    '''
     output_gate_dependency_id = set()
     queue = set()
     queue.add(output_wire)
@@ -121,6 +207,24 @@ def find_output_gate_dependency(output_wire, gates):
     return output_gate_dependency_id
 
 def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
+    '''Check if the sum of two bits is correctly computed by the circuit.
+
+    Parameters
+    ----------
+    i_bit : int
+        The index of the bit to check (0-indexed).
+    n_bits : int
+        The total number of bits in the circuit.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+    map_output_wire_to_gate : dict[str, int]
+        A dictionary mapping output wire names to their corresponding gate indices.
+
+    Returns
+    -------
+    bool
+        True if the bit sum is correctly computed, False otherwise.
+    '''
     initial_wires = {}
     if i_bit < 10:
         i_bit_str = '0' + str(i_bit)
@@ -136,36 +240,52 @@ def check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
             initial_wires['y' + str(i)] = 0
 
     # x = 0, y = 0
-    wires = initial_wires.copy()
-    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    initial_wires['x' + i_bit_str] = 0
+    initial_wires['y' + i_bit_str] = 0
+    number = run_circuit(initial_wires, gates, map_output_wire_to_gate)
     if number != 0:
         return False
 
     # x = 1, y = 0
-    wires = initial_wires.copy()
-    wires['x' + i_bit_str] = 1
-    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    initial_wires['x' + i_bit_str] = 1
+    initial_wires['y' + i_bit_str] = 0
+    number = run_circuit(initial_wires, gates, map_output_wire_to_gate)
     if number != 2 ** i_bit:
         return False
 
     # x = 0, y = 1
-    wires = initial_wires.copy()
-    wires['y' + i_bit_str] = 1
-    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    initial_wires['x' + i_bit_str] = 0
+    initial_wires['y' + i_bit_str] = 1
+    number = run_circuit(initial_wires, gates, map_output_wire_to_gate)
     if number != 2 ** i_bit:
         return False
 
     # x = 1, y = 1
-    wires = initial_wires.copy()
-    wires['x' + i_bit_str] = 1
-    wires['y' + i_bit_str] = 1
-    number = run_circuit(wires, gates, map_output_wire_to_gate)
+    initial_wires['x' + i_bit_str] = 1
+    initial_wires['y' + i_bit_str] = 1
+    number = run_circuit(initial_wires, gates, map_output_wire_to_gate)
     if number != 2 ** (i_bit + 1):
         return True
 
     return True
 
 def find_wrong_bits(n_bits, gates, map_output_wire_to_gate):
+    '''Find bits that are not correctly computed by the circuit.
+
+    Parameters
+    ----------
+    n_bits : int
+        The total number of bits in the circuit.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+    map_output_wire_to_gate : dict[str, int]
+        A dictionary mapping output wire names to their corresponding gate indices.
+
+    Returns
+    -------
+    list[int]
+        A sorted list of indices of bits that are not correctly computed by the circuit.
+    '''
     wrong_bits = set()
     for i_bit in range(n_bits):
         if not check_bit_sum(i_bit, n_bits, gates, map_output_wire_to_gate):
@@ -173,7 +293,48 @@ def find_wrong_bits(n_bits, gates, map_output_wire_to_gate):
 
     return sorted(wrong_bits)
 
-def find_swapped_wires(wrong_bits, n_bits, gates, map_output_wire_to_gate, output_wires_dependency_id):
+def swap_wires(wire1, wire2, gates, map_output_wire_to_gate):
+    '''Swap two wires in the circuit.
+
+    Parameters
+    ----------
+    wire1 : str
+        The first wire to swap.
+    wire2 : str
+        The second wire to swap.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+    map_output_wire_to_gate : dict[str, int]
+        A dictionary mapping output wire names to their corresponding gate indices.
+    '''
+    id_gate1 = map_output_wire_to_gate[wire1]
+    id_gate2 = map_output_wire_to_gate[wire2]
+
+    tmp_gate1 = gates[id_gate1]
+    tmp_gate2 = gates[id_gate2]
+
+    gates[id_gate1] = (tmp_gate1[0], tmp_gate1[1], tmp_gate1[2], wire2)
+    gates[id_gate2] = (tmp_gate2[0], tmp_gate2[1], tmp_gate2[2], wire1)\
+
+    map_output_wire_to_gate[wire1] = id_gate2
+    map_output_wire_to_gate[wire2] = id_gate1
+
+def find_swapped_wires(wrong_bits, n_bits, gates, map_output_wire_to_gate, output_wires_dependency):
+    '''Find the swapped wires.
+
+    Parameters
+    ----------
+    wrong_bits : list[int]
+        A sorted list of indices of bits that are not correctly computed by the circuit.
+    n_bits : int
+        The total number of bits in the circuit.
+    gates : list[tuple[str, str, function, str]]
+        A list of tuples representing gates, where each tuple contains two input wires, an operation function, and an output wire.
+    map_output_wire_to_gate : dict[str, int]
+        A dictionary mapping output wire names to their corresponding gate indices.
+    output_wires_dependency : dict[str, list[str]]
+        A dictionary mapping output wire names to a list of gate indices they depend on.
+    '''
     candidates = set()
     for wrong_bit in wrong_bits:
         if wrong_bit < 10:
@@ -182,12 +343,23 @@ def find_swapped_wires(wrong_bits, n_bits, gates, map_output_wire_to_gate, outpu
             i_bit_str = str(wrong_bit)
 
         output_wire = 'z' + i_bit_str
-        for id_gate in output_wires_dependency_id[output_wire]:
-            if wire[0] not in ['x', 'y']:
-                candidates.add(gates[id_gate][3])
+        for wire in output_wires_dependency[output_wire]:
+            candidates.add(wire)
 
-    print(candidates)
-    print(len(candidates))
+    candidates = sorted(candidates)
+
+    # First find a swap that solves one of the problems
+    for wire1, wire2 in combinations(candidates, 2):
+        print("Trying to swap {0} <-> {1}".format(wire1, wire2))
+        swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+        wrong_bits_after_swap = find_wrong_bits(n_bits, gates, map_output_wire_to_gate)
+        if len(wrong_bits_after_swap) < len(wrong_bits):
+            if all(x in wrong_bits for x in wrong_bits_after_swap):
+                print("Found a swap that solves one of the problems: {0} <-> {1}".format(wire1, wire2))
+                print("Wrong bits after swap: {0}".format(wrong_bits_after_swap))
+                return
+
+        swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
@@ -203,15 +375,13 @@ if __name__ == '__main__':
         n_bits = sum([1 for wire in input_wires if wire[0] == 'x'])
         all_wires = find_all_wires(input_wires, gates)
         output_wires = extract_output_wires(all_wires)
-        # print("Output wires: {0}".format(output_wires))
         output_wires_dependency_id = [find_output_gate_dependency(x, gates) for x in output_wires]
-        # for output_wire, output_wire_dependency_id in zip(output_wires, output_wires_dependency_id):
-        #     output_wire_dependency = [gates[x][3] for x in output_wire_dependency_id]
-        #     print("Output wire {0} dependency: {1}".format(output_wire, output_wire_dependency))
+        output_wires_dependency = {}
+        for output_wire, output_wire_dependency_id in zip(output_wires, output_wires_dependency_id):
+            output_wires_dependency[output_wire] = [gates[x][3] for x in output_wire_dependency_id]
 
         wrong_bits = find_wrong_bits(n_bits, gates, map_output_wire_to_gate)
-        print(wrong_bits)
-        find_swapped_wires(wrong_bits, n_bits, gates, map_output_wire_to_gate, output_wires_dependency_id)
+        find_swapped_wires(wrong_bits, n_bits, gates, map_output_wire_to_gate, output_wires_dependency)
 
     #     res = 0
 
