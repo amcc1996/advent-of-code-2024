@@ -262,43 +262,52 @@ def check_bit_sum(i_bit, input_wires, output_wires, wires, gates, map_output_wir
     else:
         i_bit_str = str(i_bit)
 
-    # x = 0, y = 0
+    uses_carry = i_bit > 0
+
+    i_bit_prev = i_bit - 1
+    if i_bit_prev < 10:
+        i_bit_prev_str = '0' + str(i_bit_prev)
+    else:
+        i_bit_prev_str = str(i_bit_prev)
+
+    sequence = None
+    for x_bit_val in range(2):
+        for y_bit_val in range(2):
+            for carry_bit_val in range(2):
+                input_wires['x' + i_bit_str] = x_bit_val
+                input_wires['y' + i_bit_str] = y_bit_val
+                if uses_carry:
+                    input_wires['x' + i_bit_prev_str] = carry_bit_val
+                    input_wires['y' + i_bit_prev_str] = carry_bit_val
+
+                if sequence is not None:
+                    number, _, _ = run_circuit(input_wires, output_wires, wires, gates, map_output_wire_to_gate, sequence)
+                else:
+                    number, sequence, finished = run_circuit(input_wires, output_wires, wires, gates, map_output_wire_to_gate)
+
+                if not finished:
+                    input_wires['x' + i_bit_str] = 0
+                    input_wires['y' + i_bit_str] = 0
+                    if uses_carry:
+                        input_wires['x' + i_bit_prev_str] = 0
+                        input_wires['y' + i_bit_prev_str] = 0
+
+                    return False
+
+                expected_number = int((x_bit_val + y_bit_val) * 2 ** i_bit + 2 * int(uses_carry) * carry_bit_val * 2 ** (i_bit - 1))
+                if number != expected_number:
+                    input_wires['x' + i_bit_str] = 0
+                    input_wires['y' + i_bit_str] = 0
+                    if uses_carry:
+                        input_wires['x' + i_bit_prev_str] = 0
+                        input_wires['y' + i_bit_prev_str] = 0
+                    return False
+
     input_wires['x' + i_bit_str] = 0
     input_wires['y' + i_bit_str] = 0
-    number, sequence, finished = run_circuit(input_wires, output_wires, wires, gates, map_output_wire_to_gate)
-    if not finished:
-        return False
-
-    if number != 0:
-        return False
-
-    # x = 1, y = 0
-    input_wires['x' + i_bit_str] = 1
-    input_wires['y' + i_bit_str] = 0
-    number, _, _ = run_circuit(input_wires, output_wires, wires, gates, map_output_wire_to_gate, sequence)
-    if number != 2 ** i_bit:
-        input_wires['x' + i_bit_str] = 0
-        return False
-
-    # x = 0, y = 1
-    input_wires['x' + i_bit_str] = 0
-    input_wires['y' + i_bit_str] = 1
-    number, _, _ = run_circuit(input_wires, output_wires, wires, gates, map_output_wire_to_gate, sequence)
-    if number != 2 ** i_bit:
-        input_wires['y' + i_bit_str] = 0
-        return False
-
-    # x = 1, y = 1
-    input_wires['x' + i_bit_str] = 1
-    input_wires['y' + i_bit_str] = 1
-    number, _, _ = run_circuit(input_wires, output_wires, wires, gates, map_output_wire_to_gate, sequence)
-    if number != 2 ** (i_bit + 1):
-        input_wires['x' + i_bit_str] = 0
-        input_wires['y' + i_bit_str] = 0
-        return True
-
-    input_wires['x' + i_bit_str] = 0
-    input_wires['y' + i_bit_str] = 0
+    if uses_carry:
+        input_wires['x' + i_bit_prev_str] = 0
+        input_wires['y' + i_bit_prev_str] = 0
 
     return True
 
@@ -392,72 +401,172 @@ def find_swapped_wires(wrong_bits, n_bits, input_wires, output_wires, wires, gat
             candidates.add(wire)
 
     candidates = sorted(candidates)
+    print("\nCandidates for swapping ({1}): {0}".format(candidates, len(candidates)))
 
-    # First find all swaps that solves the lowest bit
-    swaps_that_solve_first_bit= []
+    # ASSUMPTION 2: I will assume that the wires of the bits before the first wrong one
+    # are fine and will not be swapped.
+    min_wrong_bit = min(wrong_bits)
+    good_wires = set()
+    for i_bit in range(min_wrong_bit):
+        if i_bit < 10:
+            i_bit_str = '0' + str(i_bit)
+        else:
+            i_bit_str = str(i_bit)
+
+        output_wire = 'z' + i_bit_str
+        for wire in output_wires_dependency[output_wire]:
+            good_wires.add(wire)
+
+    candidates = [x for x in candidates if x not in good_wires]
+    print("\nFiltered candidates for swapping ({1}): {0}".format(candidates, len(candidates)))
+
+    # ASSUMPTION 3: I will assume that a swap will always solve at leat one bit, sequentially,
+    # starting from the first wrong one. In other words, I will not try to find combinations of
+    # two or more swaps that solve a single bit.
+
+    # First swap ---------------------------------------------------------------------------
+    min_wrong_bit = min(wrong_bits)
+    first_wire_swaps = []
     n_combinations = math.comb(len(candidates), 2)
     for i, (wire1, wire2) in enumerate(combinations(candidates, 2)):
-        print(" {} of {}".format(i + 1, n_combinations))
         if wire1 == wire2:
             continue
+
+        # print(" {} of {}".format(i + 1, n_combinations))
         swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+        # First check if the swap solves the first wrong bit
+        if not check_bit_sum(min_wrong_bit, input_wires, output_wires, wires, gates, map_output_wire_to_gate):
+            swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+            continue
+
         wrong_bits_after_swap = find_wrong_bits(n_bits, input_wires, output_wires, wires, gates, map_output_wire_to_gate)
-        min_wrong_bit_1 = min(wrong_bits_after_swap)
-        if min_wrong_bit_1 > wrong_bits[0]:
-            print("Found a swap that solves the first bit: {0} <-> {1}".format(wire1, wire2))
-            swaps_that_solve_first_bit.append((wire1, wire2, min_wrong_bit_1))
+        min_wrong_bit_after_swap = min(wrong_bits_after_swap)
+        if (min_wrong_bit_after_swap > min_wrong_bit) and all([x in wrong_bits for x in wrong_bits_after_swap]):
+            # print("Found a swap that solves some bits: {0} <-> {1}".format(wire1, wire2))
+            first_wire_swaps.append((wire1, wire2, wrong_bits_after_swap))
 
         swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
 
-    print("Found {0} swaps that solve the first bit".format(len(swaps_that_solve_first_bit)))
-    for wire1, wire2, _ in swaps_that_solve_first_bit:
-        print("Swap {0} <-> {1}".format(wire1, wire2))
+    print("\nFirst swap: found {0} possibilities".format(len(first_wire_swaps)))
+    for wire1, wire2, wrong_bits_after_swap in first_wire_swaps:
+        print(" Swap {0} <-> {1}".format(wire1, wire2))
+        print(" ... initial wrong bits: {0}".format(wrong_bits))
+        print(" ... wrong bits after first swap: {0}".format(wrong_bits_after_swap))
 
-    swaps_that_solve_second_bit= []
-    for wire1, wire2, min_wrong_bit_1 in swaps_that_solve_first_bit:
+    # Second swap --------------------------------------------------------------------------
+    second_wire_swaps = []
+    for wire1, wire2, wrong_bits_after_swap in first_wire_swaps:
+        min_wrong_bit = min(wrong_bits_after_swap)
         for i, (wire3, wire4) in enumerate(combinations(candidates, 2)):
-            print(" {} of {}".format(i + 1, n_combinations))
-            used_wires = list(sorted(set((wire1, wire2) + (wire3, wire4))))
-            if len(used_wires) != 4:
+            if wire3 == wire4:
                 continue
+
+            if wire3 in [wire1, wire2] or wire4 in [wire1, wire2]:
+                continue
+
+            # print(" {} of {}".format(i + 1, n_combinations))
             swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
             swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+            # First check if the swap solves the first wrong bit
+            if not check_bit_sum(min_wrong_bit, input_wires, output_wires, wires, gates, map_output_wire_to_gate):
+                swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+                swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+                continue
+
             wrong_bits_after_swap = find_wrong_bits(n_bits, input_wires, output_wires, wires, gates, map_output_wire_to_gate)
-            min_wrong_bit_2 = min(wrong_bits_after_swap)
-            if min_wrong_bit_2 >= min_wrong_bit_1:
-                print("Found a swap that solves the first bit: {0} <-> {1}".format(wire3, wire4))
-                swaps_that_solve_second_bit.append(((wire1, wire2, wire3, wire4, min_wrong_bit_2)))
+            min_wrong_bit_after_swap = min(wrong_bits_after_swap)
+            if (min_wrong_bit_after_swap > min_wrong_bit) and all([x in wrong_bits for x in wrong_bits_after_swap]):
+                # print("Found a swap that solves some bits: {0} <-> {1}".format(wire3, wire4))
+                second_wire_swaps.append((wire1, wire2, wire3, wire4, wrong_bits_after_swap))
 
             swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
             swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
 
-    print("Found {0} swaps that solve the second bit".format(len(swaps_that_solve_second_bit)))
-    for wire1, wire2 in swaps_that_solve_second_bit:
-        print("Swap {0} <-> {1}  |  {2} <-> {3}".format(wire1, wire2, wire3, wire4))
+    print("\nSecond swap: found {0} possibilities".format(len(second_wire_swaps)))
+    for wire1, wire2, wire3, wire4, wrong_bits_after_swap in second_wire_swaps:
+        print(" Swap {0} <-> {1}    {2} <-> {3}".format(wire1, wire2, wire3, wire4))
+        print(" ... initial wrong bits: {0}".format(wrong_bits))
+        print(" ... wrong bits after second swap: {0}".format(wrong_bits_after_swap))
 
-    # for pair1, pair2, pair3, pair4 in combinations(swaps_that_solve_one_problem, 4):
-    #     used_wires = list(sorted(set(pair1 + pair2 + pair3 + pair4)))
-    #     if len(used_wires) != 8:
-    #         continue
+    # Third swap ---------------------------------------------------------------------------
+    third_wire_swaps = []
+    for wire1, wire2, wire3, wire4, wrong_bits_after_swap in second_wire_swaps:
+        min_wrong_bit = min(wrong_bits_after_swap)
+        for i, (wire5, wire6) in enumerate(combinations(candidates, 2)):
+            if wire5 == wire6:
+                continue
 
-    #     swap_wires(pair1[0], pair1[1], gates, map_output_wire_to_gate)
-    #     swap_wires(pair2[0], pair2[1], gates, map_output_wire_to_gate)
-    #     swap_wires(pair3[0], pair3[1], gates, map_output_wire_to_gate)
-    #     swap_wires(pair4[0], pair4[1], gates, map_output_wire_to_gate)
-    #     wrong_bits_after_swap = find_wrong_bits(n_bits, input_wires, output_wires, wires, gates, map_output_wire_to_gate)
-    #     if len(wrong_bits_after_swap) == 0:
-    #         print("Found a solution with swaps:")
-    #         print("Swap {0} <-> {1}".format(pair1[0], pair1[1]))
-    #         print("Swap {0} <-> {1}".format(pair2[0], pair2[1]))
-    #         print("Swap {0} <-> {1}".format(pair3[0], pair3[1]))
-    #         print("Swap {0} <-> {1}".format(pair4[0], pair4[1]))
-    #         print("Wrong bits after swap: {0} / {1}".format(len(wrong_bits_after_swap), len(wrong_bits)))
-    #         print("Result: {0}".format(",".join(used_wires)))
+            if wire5 in [wire1, wire2, wire3, wire4] or wire6 in [wire1, wire2, wire3, wire4]:
+                continue
 
-    #     swap_wires(pair1[1], pair1[0], gates, map_output_wire_to_gate)
-    #     swap_wires(pair2[1], pair2[0], gates, map_output_wire_to_gate)
-    #     swap_wires(pair3[1], pair3[0], gates, map_output_wire_to_gate)
-    #     swap_wires(pair4[1], pair4[0], gates, map_output_wire_to_gate)
+            # print(" {} of {}".format(i + 1, n_combinations))
+            swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+            swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+            swap_wires(wire5, wire6, gates, map_output_wire_to_gate)
+            # First check if the swap solves the first wrong bit
+            if not check_bit_sum(min_wrong_bit, input_wires, output_wires, wires, gates, map_output_wire_to_gate):
+                swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+                swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+                swap_wires(wire5, wire6, gates, map_output_wire_to_gate)
+                continue
+
+            wrong_bits_after_swap = find_wrong_bits(n_bits, input_wires, output_wires, wires, gates, map_output_wire_to_gate)
+            min_wrong_bit_after_swap = min(wrong_bits_after_swap)
+            if (min_wrong_bit_after_swap > min_wrong_bit) and all([x in wrong_bits for x in wrong_bits_after_swap]):
+                # print("Found a swap that solves some bits: {0} <-> {1}".format(wire5, wire6))
+                third_wire_swaps.append((wire1, wire2, wire3, wire4, wire5, wire6, wrong_bits_after_swap))
+
+            swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+            swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+            swap_wires(wire5, wire6, gates, map_output_wire_to_gate)
+
+    print("\nThird swap: found {0} possibilities".format(len(third_wire_swaps)))
+    for wire1, wire2, wire3, wire4, wire5, wire6, wrong_bits_after_swap in third_wire_swaps:
+        print(" Swap {0} <-> {1}    {2} <-> {3}    {4} <-> {5}".format(wire1, wire2, wire3, wire4, wire5, wire6))
+        print(" ... initial wrong bits: {0}".format(wrong_bits))
+        print(" ... wrong bits after third swap: {0}".format(wrong_bits_after_swap))
+
+    # Fourth and final swap ----------------------------------------------------------------
+    fourth_wire_swaps = []
+    for wire1, wire2, wire3, wire4, wire5, wire6, wrong_bits_after_swap in third_wire_swaps:
+        min_wrong_bit = min(wrong_bits_after_swap)
+        for i, (wire7, wire8) in enumerate(combinations(candidates, 2)):
+            if wire7 == wire8:
+                continue
+
+            if wire7 in [wire1, wire2, wire3, wire4, wire5, wire6] or wire8 in [wire1, wire2, wire3, wire4, wire5, wire6]:
+                continue
+
+            # print(" {} of {}".format(i + 1, n_combinations))
+            swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+            swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+            swap_wires(wire5, wire6, gates, map_output_wire_to_gate)
+            swap_wires(wire7, wire8, gates, map_output_wire_to_gate)
+            # First check if the swap solves the first wrong bit
+            if not check_bit_sum(min_wrong_bit, input_wires, output_wires, wires, gates, map_output_wire_to_gate):
+                swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+                swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+                swap_wires(wire5, wire6, gates, map_output_wire_to_gate)
+                swap_wires(wire7, wire8, gates, map_output_wire_to_gate)
+                continue
+
+            wrong_bits_after_swap = find_wrong_bits(n_bits, input_wires, output_wires, wires, gates, map_output_wire_to_gate)
+            min_wrong_bit_after_swap = min(wrong_bits_after_swap) if len(wrong_bits_after_swap) > 0 else None
+            if min_wrong_bit_after_swap is None:
+                # print("Found a swap that solves all the bits: {0} <-> {1}".format(wire7, wire8))
+                fourth_wire_swaps.append((wire1, wire2, wire3, wire4, wire5, wire6, wire7, wire8, wrong_bits_after_swap))
+
+            swap_wires(wire1, wire2, gates, map_output_wire_to_gate)
+            swap_wires(wire3, wire4, gates, map_output_wire_to_gate)
+            swap_wires(wire5, wire6, gates, map_output_wire_to_gate)
+            swap_wires(wire7, wire8, gates, map_output_wire_to_gate)
+
+    print("\nFourth swap: found {0} possibilities".format(len(fourth_wire_swaps)))
+    for wire1, wire2, wire3, wire4, wire5, wire6, wire7, wire8, wrong_bits_after_swap in fourth_wire_swaps:
+        print(" Swap {0} <-> {1}    {2} <-> {3}    {4} <-> {5}    {6} <-> {7}".format(wire1, wire2, wire3, wire4, wire5, wire6, wire7, wire8))
+        print(" ... initial wrong bits: {0}".format(wrong_bits))
+        print(" ... wrong bits after last swap: {0}".format(wrong_bits_after_swap))
+        print(" ... result: {0}".format(",".join(sorted(set([wire1, wire2, wire3, wire4, wire5, wire6, wire7, wire8])))))
 
 if __name__ == '__main__':
     filename, part = get_input_filename(os.path.dirname(__file__))
@@ -483,6 +592,10 @@ if __name__ == '__main__':
             output_wires_dependency[output_wire] = [gates[x][3] for x in output_wire_dependency_id]
 
         wrong_bits = find_wrong_bits(n_bits, input_wires, output_wires, wires, gates, map_output_wire_to_gate)
+        print("Wrong bits: {0}".format(wrong_bits))
+        # ASSUMPTION 1: this does not ensure a general solution, but I will assume that the
+        # problems are in the dependencies of the wires associated with faulty single bit sums
+
         find_swapped_wires(wrong_bits, n_bits, input_wires, output_wires, wires, gates, map_output_wire_to_gate, output_wires_dependency)
 
     #     res = 0
